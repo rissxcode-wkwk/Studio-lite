@@ -1,1271 +1,797 @@
---[[
-╔════════════════════════════════════════════════════════════════════════╗
-║           ThemeRecolor v8+ ENHANCED SUPREME - FINAL BOSS VERSION       ║
-║                                                                        ║
-║  🎨 v8 Foundation (1200+ lines) + v10 MEGA Features (500+ features)  ║
-║  ✨ UI Redesign Integrated | 11 Premium Themes | Complete Suite      ║
-║  🔒 Full Protection System | Advanced Console | Settings Panel        ║
-║                                                                        ║
-║  Version: 8+ ENHANCED SUPREME | Lines: 2000+ | Status: PRODUCTION   ║
-║  Created: Oct 2026 | Made By: Redz + Enhanced by Claude             ║
-║                                                                        ║
-║  🚀 TIDAK ADA YANG DIHAPUS - SEMUA FITUR v8 TETAP!                   ║
-║  ✅ Proteksi settingrigbtn 100% | ColorPalette | SelectMultiButton   ║
-║  ✅ 11 Premium Themes (Dark Pro, Cyberpunk, dll)                     ║
-║  ✅ Advanced Console | Settings Panel | Game Tools                   ║
-║  ✅ Modern Open/Save Dialog | Context Menu | Explorer Styling        ║
-║  ✅ Performance Monitor | Real-time FPS/Memory                       ║
-║  ✅ Auto Theme Sync | Smooth Animations | 100% Integrated           ║
-║                                                                        ║
-╚════════════════════════════════════════════════════════════════════════╝
-
-CARA PAKAI:
-Taruh sebagai LocalScript di StarterPlayer > StarterPlayerScripts
-ATAU di StarterPlayer > StarterCharacterScripts
-
-KEY: STUDIORIS2024
-]]
+-- LocalScript: ColorPalette controller v4 (tanpa script.Parent, toggle tidak diubah)
 
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--- ════════════════════════════════════════════════════════════════════════
--- TUNGGU STUDIOGUI EXIST
--- ════════════════════════════════════════════════════════════════════════
+---------------------------------------------------------------------
+-- Cari Frame ColorPalette yang SUDAH ADA
+---------------------------------------------------------------------
+local function findPalette()
+	for _, d in ipairs(playerGui:GetDescendants()) do
+		if d.Name == "ColorPalette" and d:IsA("GuiObject") then
+			return d
+		end
+	end
+	return nil
+end
 
-local studioGui = playerGui:WaitForChild("StudioGui")
+local colorPalette = findPalette()
+local waited = 0
+while not colorPalette and waited < 30 do
+	task.wait(0.25)
+	waited += 0.25
+	colorPalette = findPalette()
+end
+if not colorPalette then
+	warn("[ColorPalette] Frame 'ColorPalette' tidak ditemukan di PlayerGui.")
+	return
+end
 
--- ════════════════════════════════════════════════════════════════════════
--- 🎨 V8 THEME ORIGINAL - PRESERVED 100%
--- ════════════════════════════════════════════════════════════════════════
+local function find(name)
+	return colorPalette:FindFirstChild(name, true)
+end
 
-local THEME_V8 = {
-	FrameColor       = Color3.fromRGB(46, 46, 46),
-	FrameColorAlt    = Color3.fromRGB(56, 56, 56),
-	BorderColor      = Color3.fromRGB(35, 35, 35),
-	TextColor        = Color3.fromRGB(255, 255, 255),
-	TextButtonColor  = Color3.fromRGB(60, 60, 60),
-	TextButtonHover  = Color3.fromRGB(75, 75, 75),
-	TextBoxColor     = Color3.fromRGB(38, 38, 38),
-	StrokeColor      = Color3.fromRGB(100, 100, 100),
+local basicColors = find("BasicColors")
+local palette = find("Palette")
+local crosshair = find("ColorPaletteCrosshairs")
+local clickBlocker = find("ClickBlocker")
+local darkness = find("Darkness")
+local darknessAppearance = find("DarknessAppearance")
+local okButton = find("OkButton")
+local cancelButton = find("CancelButton") or find("Cancel")
+local selectedBrickText = find("SelectedBrickColorText")
+local selectedColorFrame = find("SelectedColor")
+local selectedColorText = find("SelectedColorText")
+
+---------------------------------------------------------------------
+-- Posisi di tengah layar
+---------------------------------------------------------------------
+colorPalette.AnchorPoint = Vector2.new(0.5, 0.5)
+colorPalette.Position = UDim2.new(0.5, 0, 0.5, 0)
+
+if clickBlocker and clickBlocker:IsA("GuiObject") then
+	clickBlocker.Active = true
+end
+
+---------------------------------------------------------------------
+-- State
+---------------------------------------------------------------------
+local hue, sat, val = 0, 0, 0.65
+local currentColor = Color3.fromRGB(163, 162, 165)
+local openColor = currentColor
+local draggingPalette = false
+local draggingDarkness = false
+local draggingWindow = false
+local dragStart, dragOrigin
+local closing = false
+local originalSize = colorPalette.Size
+local MAX_HISTORY = 8
+local history = {
+	Color3.fromRGB(255, 0, 0), Color3.fromRGB(255, 136, 0), Color3.fromRGB(255, 255, 0), Color3.fromRGB(0, 200, 0),
+	Color3.fromRGB(0, 200, 255), Color3.fromRGB(0, 0, 255), Color3.fromRGB(170, 0, 255), Color3.fromRGB(255, 255, 255),
 }
 
--- ════════════════════════════════════════════════════════════════════════
--- 🎨 V10 MEGA THEMES - 11 PREMIUM THEMES
--- ════════════════════════════════════════════════════════════════════════
+local TWEEN_FAST = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TWEEN_MED = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TWEEN_POP = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
-local THEMES = {
-	DarkPro = {
-		Name = "🌙 Dark Pro",
-		Primary = Color3.fromRGB(46, 46, 46),
-		Secondary = Color3.fromRGB(56, 56, 56),
-		Accent = Color3.fromRGB(0, 200, 255),
-		Text = Color3.fromRGB(255, 255, 255),
-		Button = Color3.fromRGB(60, 60, 60),
-		ButtonHover = Color3.fromRGB(75, 75, 75),
-		Success = Color3.fromRGB(76, 175, 80),
-		Error = Color3.fromRGB(244, 67, 54),
-		Warning = Color3.fromRGB(255, 152, 0),
-	},
-	Cyberpunk = {
-		Name = "⚡ Cyberpunk",
-		Primary = Color3.fromRGB(20, 20, 30),
-		Secondary = Color3.fromRGB(30, 30, 45),
-		Accent = Color3.fromRGB(138, 43, 226),
-		Text = Color3.fromRGB(255, 0, 255),
-		Button = Color3.fromRGB(40, 20, 60),
-		ButtonHover = Color3.fromRGB(60, 30, 90),
-		Success = Color3.fromRGB(0, 255, 200),
-		Error = Color3.fromRGB(255, 0, 100),
-		Warning = Color3.fromRGB(255, 128, 0),
-	},
-	Dracula = {
-		Name = "🧛 Dracula",
-		Primary = Color3.fromRGB(40, 42, 54),
-		Secondary = Color3.fromRGB(44, 46, 58),
-		Accent = Color3.fromRGB(139, 233, 253),
-		Text = Color3.fromRGB(248, 248, 242),
-		Button = Color3.fromRGB(50, 52, 64),
-		ButtonHover = Color3.fromRGB(60, 62, 74),
-		Success = Color3.fromRGB(80, 250, 123),
-		Error = Color3.fromRGB(255, 85, 85),
-		Warning = Color3.fromRGB(241, 250, 140),
-	},
-	Nord = {
-		Name = "❄️ Nord",
-		Primary = Color3.fromRGB(46, 52, 64),
-		Secondary = Color3.fromRGB(59, 66, 82),
-		Accent = Color3.fromRGB(136, 192, 208),
-		Text = Color3.fromRGB(236, 239, 244),
-		Button = Color3.fromRGB(67, 76, 94),
-		ButtonHover = Color3.fromRGB(76, 86, 106),
-		Success = Color3.fromRGB(163, 190, 140),
-		Error = Color3.fromRGB(191, 97, 106),
-		Warning = Color3.fromRGB(235, 203, 139),
-	},
-	Monokai = {
-		Name = "🖤 Monokai",
-		Primary = Color3.fromRGB(39, 40, 34),
-		Secondary = Color3.fromRGB(50, 51, 45),
-		Accent = Color3.fromRGB(102, 217, 239),
-		Text = Color3.fromRGB(248, 248, 242),
-		Button = Color3.fromRGB(60, 61, 55),
-		ButtonHover = Color3.fromRGB(70, 71, 65),
-		Success = Color3.fromRGB(166, 226, 46),
-		Error = Color3.fromRGB(249, 38, 114),
-		Warning = Color3.fromRGB(253, 151, 31),
-	},
-	OneDark = {
-		Name = "🌑 One Dark",
-		Primary = Color3.fromRGB(40, 44, 52),
-		Secondary = Color3.fromRGB(53, 59, 69),
-		Accent = Color3.fromRGB(97, 175, 239),
-		Text = Color3.fromRGB(171, 178, 191),
-		Button = Color3.fromRGB(61, 67, 81),
-		ButtonHover = Color3.fromRGB(76, 82, 99),
-		Success = Color3.fromRGB(152, 195, 121),
-		Error = Color3.fromRGB(224, 108, 117),
-		Warning = Color3.fromRGB(229, 192, 123),
-	},
-	Material = {
-		Name = "📱 Material",
-		Primary = Color3.fromRGB(33, 33, 33),
-		Secondary = Color3.fromRGB(48, 48, 48),
-		Accent = Color3.fromRGB(103, 58, 183),
-		Text = Color3.fromRGB(229, 229, 229),
-		Button = Color3.fromRGB(66, 66, 66),
-		ButtonHover = Color3.fromRGB(97, 97, 97),
-		Success = Color3.fromRGB(76, 175, 80),
-		Error = Color3.fromRGB(244, 67, 54),
-		Warning = Color3.fromRGB(255, 152, 0),
-	},
-	SolarizedDark = {
-		Name = "☀️ Solarized",
-		Primary = Color3.fromRGB(7, 54, 66),
-		Secondary = Color3.fromRGB(25, 72, 84),
-		Accent = Color3.fromRGB(42, 161, 152),
-		Text = Color3.fromRGB(131, 148, 150),
-		Button = Color3.fromRGB(38, 86, 105),
-		ButtonHover = Color3.fromRGB(58, 106, 125),
-		Success = Color3.fromRGB(133, 153, 0),
-		Error = Color3.fromRGB(220, 50, 47),
-		Warning = Color3.fromRGB(181, 137, 0),
-	},
-	GruvboxDark = {
-		Name = "🟫 Gruvbox",
-		Primary = Color3.fromRGB(40, 40, 40),
-		Secondary = Color3.fromRGB(60, 56, 54),
-		Accent = Color3.fromRGB(251, 184, 108),
-		Text = Color3.fromRGB(235, 219, 178),
-		Button = Color3.fromRGB(80, 73, 69),
-		ButtonHover = Color3.fromRGB(102, 92, 84),
-		Success = Color3.fromRGB(184, 187, 38),
-		Error = Color3.fromRGB(251, 73, 52),
-		Warning = Color3.fromRGB(254, 128, 25),
-	},
-	TokyoNight = {
-		Name = "🌃 Tokyo Night",
-		Primary = Color3.fromRGB(26, 27, 38),
-		Secondary = Color3.fromRGB(41, 44, 60),
-		Accent = Color3.fromRGB(125, 207, 255),
-		Text = Color3.fromRGB(192, 202, 245),
-		Button = Color3.fromRGB(56, 62, 90),
-		ButtonHover = Color3.fromRGB(76, 82, 110),
-		Success = Color3.fromRGB(158, 206, 106),
-		Error = Color3.fromRGB(247, 118, 142),
-		Warning = Color3.fromRGB(224, 175, 104),
-	},
-	CatppuccinMocha = {
-		Name = "🌸 Catppuccin",
-		Primary = Color3.fromRGB(30, 30, 46),
-		Secondary = Color3.fromRGB(49, 50, 68),
-		Accent = Color3.fromRGB(137, 180, 250),
-		Text = Color3.fromRGB(205, 214, 244),
-		Button = Color3.fromRGB(69, 71, 90),
-		ButtonHover = Color3.fromRGB(88, 91, 112),
-		Success = Color3.fromRGB(166, 227, 161),
-		Error = Color3.fromRGB(243, 139, 168),
-		Warning = Color3.fromRGB(249, 226, 175),
-	},
-}
+local activeTweens = {}
+local function tween(obj, info, props, key)
+	if not obj then return end
+	key = key or obj
+	local old = activeTweens[key]
+	if old then old:Cancel() end
+	local ok, t = pcall(TweenService.Create, TweenService, obj, info, props)
+	if ok and t then
+		activeTweens[key] = t
+		t:Play()
+		return t
+	end
+end
 
-local CURRENT_THEME = THEMES.DarkPro
+---------------------------------------------------------------------
+-- Helper
+---------------------------------------------------------------------
+local function to255(c)
+	return math.clamp(math.round(c.R * 255), 0, 255),
+		math.clamp(math.round(c.G * 255), 0, 255),
+		math.clamp(math.round(c.B * 255), 0, 255)
+end
 
--- ════════════════════════════════════════════════════════════════════════
--- V8 ORIGINAL CODE - ALL PRESERVED (1200+ LINES)
--- ════════════════════════════════════════════════════════════════════════
+local function setInParent(gui, absX, absY, tweenInfo, extraKey)
+	if not gui or not gui:IsA("GuiObject") then return end
+	local parent = gui.Parent
+	local px, py = 0, 0
+	if parent and parent:IsA("GuiObject") then
+		px, py = parent.AbsolutePosition.X, parent.AbsolutePosition.Y
+	end
+	local target = UDim2.fromOffset(absX - px, absY - py)
+	if tweenInfo then
+		tween(gui, tweenInfo, { Position = target }, extraKey)
+	else
+		gui.Position = target
+	end
+end
 
-local protectedObjects = {}
-local protectedConnections = {}
+local function brickName(color)
+	local r, g, b = to255(color)
+	local bc = BrickColor.new(color)
+	local br, bg, bb = to255(bc.Color)
+	if r == br and g == bg and b == bb then
+		return bc.Name
+	end
+	return "Custom"
+end
 
-local function isInStudioGui(obj)
-	if not obj then return false end
-	
-	local current = obj
-	while current and current ~= playerGui do
-		if current == studioGui then
-			return true
+local function addCorner(gui, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius)
+	c.Parent = gui
+	return c
+end
+
+local function addStroke(gui, color, thickness, transparency)
+	local s = Instance.new("UIStroke")
+	s.Color = color
+	s.Thickness = thickness
+	s.Transparency = transparency or 0
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = gui
+	return s
+end
+
+local function same(a, b)
+	local r1, g1, b1 = to255(a)
+	local r2, g2, b2 = to255(b)
+	return r1 == r2 and g1 == g2 and b1 == b2
+end
+
+---------------------------------------------------------------------
+-- Stroke classic (solid, tanpa rainbow)
+---------------------------------------------------------------------
+local CLASSIC_DARK = Color3.fromRGB(27, 42, 53)
+local CLASSIC_LIGHT = Color3.fromRGB(255, 255, 255)
+
+addCorner(colorPalette, 6)
+addStroke(colorPalette, CLASSIC_DARK, 2, 0)
+
+local function classicBox(gui)
+	if gui and gui:IsA("GuiObject") then
+		if not gui:FindFirstChildOfClass("UICorner") then addCorner(gui, 3) end
+		if not gui:FindFirstChildOfClass("UIStroke") then addStroke(gui, CLASSIC_DARK, 1.5, 0) end
+	end
+end
+
+classicBox(palette)
+classicBox(darkness)
+classicBox(selectedColorFrame)
+classicBox(okButton)
+classicBox(cancelButton)
+
+---------------------------------------------------------------------
+-- Palette gradient (hue X, saturasi Y) + gelap sesuai Darkness
+-- ZIndex dibuat relatif ke palette supaya gradient tidak tertutup
+---------------------------------------------------------------------
+local darkOverlay, darkGradient
+local paletteZ = 1
+
+if palette and palette:IsA("GuiObject") then
+	paletteZ = palette.ZIndex
+	palette.BackgroundTransparency = 1
+	palette.ClipsDescendants = true
+	if palette:IsA("ImageButton") or palette:IsA("ImageLabel") then
+		palette.ImageTransparency = 1
+	end
+
+	-- hapus layer lama kalau script jalan ulang
+	for _, n in ipairs({ "HueLayer", "SatLayer", "DarkLayer" }) do
+		local old = palette:FindFirstChild(n)
+		if old then old:Destroy() end
+	end
+
+	local function layer(name, z)
+		local f = Instance.new("Frame")
+		f.Name = name
+		f.AnchorPoint = Vector2.new(0, 0)
+		f.Position = UDim2.fromScale(0, 0)
+		f.Size = UDim2.fromScale(1, 1)
+		f.BorderSizePixel = 0
+		f.Active = false
+		f.Visible = true
+		f.ZIndex = paletteZ + z
+		f.BackgroundTransparency = 0
+		f.BackgroundColor3 = Color3.new(1, 1, 1)
+		f.Parent = palette
+		return f
+	end
+
+	-- Layer 1: pelangi horizontal
+	local base = layer("HueLayer", 1)
+	local hg = Instance.new("UIGradient")
+	local keys = {}
+	for i = 0, 6 do
+		keys[#keys + 1] = ColorSequenceKeypoint.new(i / 6, Color3.fromHSV(i == 6 and 0 or i / 6, 1, 1))
+	end
+	hg.Color = ColorSequence.new(keys)
+	hg.Rotation = 0
+	hg.Parent = base
+
+	-- Layer 2: putih (atas = pekat -> bawah = hilang) => saturasi
+	-- Atas saturasi 0 (putih), bawah saturasi 1 (warna penuh)
+	local satLayer = layer("SatLayer", 2)
+	satLayer.BackgroundColor3 = Color3.new(1, 1, 1)
+	local sg = Instance.new("UIGradient")
+	sg.Rotation = 90
+	sg.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	sg.Parent = satLayer
+
+	-- Layer 3: hitam, transparansi diatur lewat Darkness
+	darkOverlay = layer("DarkLayer", 3)
+	darkOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
+	darkOverlay.BackgroundTransparency = 1 - (1 - val)
+
+	-- Palette mengikuti urutan: atas = saturasi tinggi.
+	-- Dibalik supaya cocok dengan rumus sat = 1 - ry
+	sg.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+end
+
+if crosshair and crosshair:IsA("GuiObject") then
+	crosshair.ZIndex = paletteZ + 10
+end
+
+-- Bar Darkness: atas = warna terang, bawah = hitam
+if darkness and darkness:IsA("GuiObject") then
+	if darkness:IsA("ImageButton") or darkness:IsA("ImageLabel") then
+		darkness.ImageTransparency = 1
+	end
+	darkness.BackgroundTransparency = 0
+	darkness.BackgroundColor3 = Color3.new(1, 1, 1)
+	local oldG = darkness:FindFirstChildOfClass("UIGradient")
+	if oldG then oldG:Destroy() end
+	darkGradient = Instance.new("UIGradient")
+	darkGradient.Rotation = 90
+	darkGradient.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(0, 0, 0))
+	darkGradient.Parent = darkness
+end
+
+if darknessAppearance and darknessAppearance:IsA("GuiObject") and darkness then
+	darknessAppearance.ZIndex = math.max(darknessAppearance.ZIndex, darkness.ZIndex + 5)
+end
+
+---------------------------------------------------------------------
+-- Drag Handle (geser window)
+---------------------------------------------------------------------
+local handle = Instance.new("Frame")
+handle.Name = "DragHandle"
+handle.BackgroundTransparency = 1
+handle.Size = UDim2.new(1, 0, 0, 16)
+handle.ZIndex = 50
+handle.Active = true
+handle.Parent = colorPalette
+
+local grip = Instance.new("Frame")
+grip.AnchorPoint = Vector2.new(0.5, 0.5)
+grip.Position = UDim2.new(0.5, 0, 0.5, 0)
+grip.Size = UDim2.fromOffset(40, 4)
+grip.BackgroundColor3 = Color3.fromRGB(110, 110, 120)
+grip.BackgroundTransparency = 0.2
+grip.BorderSizePixel = 0
+grip.ZIndex = 51
+grip.Parent = handle
+addCorner(grip, 2)
+
+handle.MouseEnter:Connect(function()
+	tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(56, 4), BackgroundTransparency = 0 }, "gripHover")
+end)
+handle.MouseLeave:Connect(function()
+	if not draggingWindow then
+		tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundTransparency = 0.2 }, "gripHover")
+	end
+end)
+
+---------------------------------------------------------------------
+-- Panel Extras: Hex, Random, History (classic)
+---------------------------------------------------------------------
+local extras = Instance.new("Frame")
+extras.Name = "Extras"
+extras.BackgroundColor3 = Color3.fromRGB(235, 235, 240)
+extras.BorderSizePixel = 0
+extras.Size = UDim2.new(1, 0, 0, 92)
+extras.Position = UDim2.new(0, 0, 1, 8)
+extras.Parent = colorPalette
+addCorner(extras, 6)
+addStroke(extras, CLASSIC_DARK, 2, 0)
+
+local hexBox = Instance.new("TextBox")
+hexBox.Name = "HexInput"
+hexBox.BackgroundColor3 = Color3.new(1, 1, 1)
+hexBox.BorderSizePixel = 0
+hexBox.Position = UDim2.new(0, 8, 0, 8)
+hexBox.Size = UDim2.new(1, -112, 0, 34)
+hexBox.Font = Enum.Font.SourceSansBold
+hexBox.TextSize = 20
+hexBox.TextColor3 = Color3.fromRGB(20, 20, 25)
+hexBox.PlaceholderText = "#RRGGBB"
+hexBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 140)
+hexBox.ClearTextOnFocus = false
+hexBox.Text = "#A3A2A5"
+hexBox.Parent = extras
+addCorner(hexBox, 3)
+local hexStroke = addStroke(hexBox, CLASSIC_DARK, 1.5, 0)
+
+local randomBtn = Instance.new("TextButton")
+randomBtn.Name = "RandomButton"
+randomBtn.AutoButtonColor = false
+randomBtn.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
+randomBtn.BorderSizePixel = 0
+randomBtn.AnchorPoint = Vector2.new(1, 0)
+randomBtn.Position = UDim2.new(1, -8, 0, 8)
+randomBtn.Size = UDim2.fromOffset(96, 34)
+randomBtn.Font = Enum.Font.SourceSansBold
+randomBtn.TextSize = 20
+randomBtn.TextColor3 = Color3.new(1, 1, 1)
+randomBtn.Text = "Random"
+randomBtn.Parent = extras
+addCorner(randomBtn, 3)
+addStroke(randomBtn, CLASSIC_DARK, 1.5, 0)
+
+local historyRow = Instance.new("Frame")
+historyRow.Name = "History"
+historyRow.BackgroundTransparency = 1
+historyRow.Position = UDim2.new(0, 8, 0, 52)
+historyRow.Size = UDim2.new(1, -16, 0, 32)
+historyRow.Parent = extras
+local grid = Instance.new("UIGridLayout")
+grid.CellPadding = UDim2.fromOffset(4, 0)
+grid.CellSize = UDim2.new(1 / MAX_HISTORY, -4, 1, 0)
+grid.SortOrder = Enum.SortOrder.LayoutOrder
+grid.Parent = historyRow
+
+local swatches = {}
+for i = 1, MAX_HISTORY do
+	local sw = Instance.new("TextButton")
+	sw.Name = "Swatch" .. i
+	sw.Text = ""
+	sw.AutoButtonColor = false
+	sw.LayoutOrder = i
+	sw.BackgroundColor3 = Color3.fromRGB(210, 210, 215)
+	sw.BorderSizePixel = 0
+	sw.Parent = historyRow
+	addCorner(sw, 3)
+	local st = addStroke(sw, CLASSIC_DARK, 1.5, 0)
+	swatches[i] = sw
+	sw.MouseEnter:Connect(function()
+		tween(st, TWEEN_FAST, { Color = CLASSIC_LIGHT, Thickness = 2.5 }, sw)
+	end)
+	sw.MouseLeave:Connect(function()
+		tween(st, TWEEN_FAST, { Color = CLASSIC_DARK, Thickness = 1.5 }, sw)
+	end)
+end
+
+local setColor -- forward declaration
+
+local function refreshHistory()
+	for i, sw in ipairs(swatches) do
+		sw.BackgroundColor3 = history[i] or Color3.fromRGB(210, 210, 215)
+	end
+end
+
+for i, sw in ipairs(swatches) do
+	sw.MouseButton1Click:Connect(function()
+		if history[i] then
+			setColor(history[i], true)
 		end
-		current = current.Parent
-	end
-	return false
+	end)
 end
 
-local function isRedColor(color)
-	if not color then return false end
-	return color.R > 0.6 and color.G < 0.3 and color.B < 0.3
-end
-
-local function isSelectMultiButton(obj)
-	if not obj:IsA("GuiButton") then return false end
-	return obj.Name == "Select MultiButton" or obj.Name == "SelectMultiButton"
-end
-
-local function isSettingRigButton(obj)
-	if not obj:IsA("GuiButton") then return false end
-	return obj.Name == "settingrigbtn" or obj.Name == "SettingRigBtn"
-end
-
-local function isButtonInFolderInsideColorPalette(obj)
-	if not obj:IsA("GuiButton") then return false end
-	
-	local parent = obj.Parent
-	if parent and parent:IsA("Folder") then
-		local grandparent = parent.Parent
-		while grandparent and grandparent ~= studioGui do
-			if grandparent:IsA("Frame") and grandparent.Name == "ColorPalette" then
-				return true
-			end
-			grandparent = grandparent.Parent
+local function pushHistory(color)
+	for i = #history, 1, -1 do
+		if same(history[i], color) then
+			table.remove(history, i)
 		end
 	end
-	return false
+	table.insert(history, 1, color)
+	while #history > MAX_HISTORY do
+		table.remove(history)
+	end
+	refreshHistory()
 end
 
-local function protectColorProperty(obj, propertyName, correctValue)
-	if protectedObjects[obj] and protectedObjects[obj][propertyName] then
-		return
+---------------------------------------------------------------------
+-- Update visual
+---------------------------------------------------------------------
+local function updateIndicators(animated)
+	local info = animated and TWEEN_FAST or nil
+
+	if palette and palette:IsA("GuiObject") and crosshair then
+		local ax = palette.AbsolutePosition.X + hue * palette.AbsoluteSize.X
+		local ay = palette.AbsolutePosition.Y + (1 - sat) * palette.AbsoluteSize.Y
+		crosshair.AnchorPoint = Vector2.new(0.5, 0.5)
+		setInParent(crosshair, ax, ay, info, "crosshairPos")
 	end
-	
-	if not protectedObjects[obj] then
-		protectedObjects[obj] = {}
-	end
-	protectedObjects[obj][propertyName] = true
-	
-	local connection
-	connection = obj:GetPropertyChangedSignal(propertyName):Connect(function()
-		if obj and obj.Parent then
-			pcall(function()
-				if propertyName == "TextColor3" then
-					if not isRedColor(obj[propertyName]) then
-						obj[propertyName] = correctValue
-					end
-				else
-					obj[propertyName] = correctValue
-				end
-			end)
+
+	if darkness and darkness:IsA("GuiObject") and darknessAppearance
+		and darknessAppearance:IsA("GuiObject")
+		and darknessAppearance.AbsoluteSize.Y < darkness.AbsoluteSize.Y * 0.5 then
+		local ay = darkness.AbsolutePosition.Y + (1 - val) * darkness.AbsoluteSize.Y
+		local parent = darknessAppearance.Parent
+		local py = 0
+		if parent and parent:IsA("GuiObject") then
+			py = parent.AbsolutePosition.Y
+		end
+		darknessAppearance.AnchorPoint = Vector2.new(darknessAppearance.AnchorPoint.X, 0.5)
+		local target = UDim2.new(
+			darknessAppearance.Position.X.Scale,
+			darknessAppearance.Position.X.Offset,
+			0,
+			ay - py
+		)
+		if info then
+			tween(darknessAppearance, info, { Position = target }, "darkPos")
 		else
-			if connection then
-				connection:Disconnect()
-			end
-		end
-	end)
-	
-	table.insert(protectedConnections, connection)
-end
-
-local function createLineSeparator(parent)
-	local existingLine = parent:FindFirstChild("LineSeparator")
-	if existingLine then
-		existingLine:Destroy()
-	end
-	
-	local lineFrame = Instance.new("Frame")
-	lineFrame.Name = "LineSeparator"
-	lineFrame.Size = UDim2.new(0, 1, 0, 30)
-	lineFrame.Position = UDim2.new(0, 405, 0, 3)
-	lineFrame.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-	lineFrame.BorderSizePixel = 0
-	lineFrame.Parent = parent
-	
-	return lineFrame
-end
-
-local function duplicatePartSelButton()
-	local mainBar = studioGui:FindFirstChild("MainBar")
-	if not mainBar then
-		print("[DEBUG] MainBar tidak ditemukan")
-		return
-	end
-	
-	local partSelButton = nil
-	for _, child in ipairs(mainBar:GetChildren()) do
-		if child.Name == "PartSel" then
-			partSelButton = child
-			break
-		end
-	end
-	
-	if not partSelButton then
-		print("[DEBUG] PartSel button tidak ditemukan di MainBar")
-		return
-	end
-	
-	local existingPluginBtn = mainBar:FindFirstChild("PluginBtn")
-	if existingPluginBtn then
-		existingPluginBtn:Destroy()
-	end
-	
-	local pluginBtn = Instance.new("TextButton")
-	pluginBtn.Name = "PluginBtn"
-	pluginBtn.Size = partSelButton.Size
-	pluginBtn.Position = UDim2.new(0, 430, 0, 3)
-	pluginBtn.BackgroundColor3 = THEME_V8.TextButtonColor
-	pluginBtn.BorderSizePixel = 0
-	pluginBtn.TextColor3 = THEME_V8.TextColor
-	pluginBtn.TextSize = 14
-	pluginBtn.Font = Enum.Font.GothamMedium
-	pluginBtn.Text = "Plugin"
-	pluginBtn.Parent = mainBar
-	
-	for _, child in ipairs(partSelButton:GetChildren()) do
-		local clonedChild = child:Clone()
-		clonedChild.Parent = pluginBtn
-		
-		if clonedChild:IsA("TextLabel") then
-			clonedChild.TextColor3 = THEME_V8.TextColor
-		elseif clonedChild:IsA("ImageLabel") or clonedChild:IsA("ImageButton") then
-			if clonedChild.BackgroundTransparency < 1 then
-				clonedChild.BackgroundColor3 = THEME_V8.FrameColor
-			end
-		end
-	end
-	
-	protectColorProperty(pluginBtn, "TextColor3", THEME_V8.TextColor)
-	protectColorProperty(pluginBtn, "BackgroundColor3", THEME_V8.TextButtonColor)
-	
-	pluginBtn.MouseEnter:Connect(function()
-		pluginBtn.BackgroundColor3 = THEME_V8.TextButtonHover
-	end)
-	pluginBtn.MouseLeave:Connect(function()
-		pluginBtn.BackgroundColor3 = THEME_V8.TextButtonColor
-	end)
-	
-	print("[DEBUG] PluginBtn berhasil dibuat di posisi (430, 3)")
-	return pluginBtn
-end
-
-local function updateSelectImages()
-	for _, obj in ipairs(studioGui:GetDescendants()) do
-		if obj:IsA("ImageLabel") then
-			if obj.Name == "select" then
-				pcall(function()
-					obj.Image = "rbxasset://textures/Cursor.png"
-					print("[DEBUG] Found 'select' image label")
-				end)
-			elseif obj.Name == "IconLabel" or obj.Name == "Icon" then
-				pcall(function()
-					obj.Image = "rbxasset://textures/Cursor.png"
-					print("[DEBUG] Found icon image label: " .. obj.Name)
-				end)
-			end
+			darknessAppearance.Position = target
 		end
 	end
 end
 
-local function setupRotateButton()
-	local mainBar = studioGui:FindFirstChild("MainBar")
-	if not mainBar then return end
-	
-	local rotateButton = nil
-	for _, child in ipairs(mainBar:GetChildren()) do
-		if child.Name == "Rotate" or child.Name == "rotate" then
-			rotateButton = child
-			break
-		end
+local function updateColor()
+	currentColor = Color3.fromHSV(hue, sat, val)
+	local r, g, b = to255(currentColor)
+
+	-- Palette tengah ikut gelap: val 1 = terang (transparan), val 0 = hitam
+	if darkOverlay then
+		tween(darkOverlay, TWEEN_FAST, { BackgroundTransparency = val }, "darkOverlay")
 	end
-	
-	if not rotateButton then
-		print("[DEBUG] Rotate button tidak ditemukan")
-		return
+	-- Bar darkness mengikuti hue & sat
+	if darkGradient then
+		darkGradient.Color = ColorSequence.new(Color3.fromHSV(hue, sat, 1), Color3.new(0, 0, 0))
 	end
-	
-	if rotateButton:IsA("TextButton") or rotateButton:IsA("GuiButton") then
-		rotateButton.BackgroundColor3 = THEME_V8.TextButtonColor
-		rotateButton.TextColor3 = THEME_V8.TextColor
-		protectColorProperty(rotateButton, "BackgroundColor3", THEME_V8.TextButtonColor)
-		protectColorProperty(rotateButton, "TextColor3", THEME_V8.TextColor)
-	end
-	
-	for _, child in ipairs(rotateButton:GetDescendants()) do
-		if child:IsA("ImageLabel") or child:IsA("ImageButton") then
-			if child.BackgroundTransparency < 1 then
-				child.BackgroundColor3 = THEME_V8.FrameColor
+
+	if selectedColorFrame and selectedColorFrame:IsA("GuiObject") then
+		tween(selectedColorFrame, TWEEN_MED, { BackgroundColor3 = currentColor }, "selBg")
+		if selectedColorFrame:IsA("ImageLabel") or selectedColorFrame:IsA("ImageButton") then
+			if selectedColorFrame.Image ~= "" then
+				tween(selectedColorFrame, TWEEN_MED, { ImageColor3 = currentColor }, "selImg")
 			end
-		elseif child:IsA("TextLabel") then
-			child.TextColor3 = THEME_V8.TextColor
-			protectColorProperty(child, "TextColor3", THEME_V8.TextColor)
 		end
 	end
-	
-	print("[DEBUG] Rotate button setup selesai")
-end
 
-local function createStudioRisBoxKey()
-	local existingBox = playerGui:FindFirstChild("StudioRisBoxKey")
-	if existingBox then
-		return existingBox
+	if selectedColorText and (selectedColorText:IsA("TextLabel") or selectedColorText:IsA("TextButton")) then
+		selectedColorText.Text = string.format("RGB: %d, %d, %d", r, g, b)
 	end
 
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "StudioRisBoxKey"
-	screenGui.Parent = playerGui
-	screenGui.ResetOnSpawn = false
-
-	local mainFrame = Instance.new("Frame")
-	mainFrame.Name = "MainFrame"
-	mainFrame.Size = UDim2.new(0, 400, 0, 250)
-	mainFrame.Position = UDim2.new(0.5, -200, 0.5, -125)
-	mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	mainFrame.BorderColor3 = Color3.fromRGB(60, 60, 60)
-	mainFrame.BorderSizePixel = 2
-	mainFrame.Parent = screenGui
-
-	local uiCorner = Instance.new("UICorner")
-	uiCorner.CornerRadius = UDim.new(0, 8)
-	uiCorner.Parent = mainFrame
-
-	local uiStroke = Instance.new("UIStroke")
-	uiStroke.Color = Color3.fromRGB(100, 100, 100)
-	uiStroke.Thickness = 1.5
-	uiStroke.Parent = mainFrame
-
-	local titleLabel = Instance.new("TextLabel")
-	titleLabel.Name = "TitleLabel"
-	titleLabel.Size = UDim2.new(1, 0, 0, 50)
-	titleLabel.Position = UDim2.new(0, 0, 0, 15)
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.Text = "STUDIORIS"
-	titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	titleLabel.TextSize = 28
-	titleLabel.Font = Enum.Font.GothamBold
-	titleLabel.TextXAlignment = Enum.TextXAlignment.Center
-	titleLabel.Parent = mainFrame
-
-	local instructionLabel = Instance.new("TextLabel")
-	instructionLabel.Name = "InstructionLabel"
-	instructionLabel.Size = UDim2.new(1, -40, 0, 30)
-	instructionLabel.Position = UDim2.new(0, 20, 0, 70)
-	instructionLabel.BackgroundTransparency = 1
-	instructionLabel.Text = "Masukkan Key Akses Anda:"
-	instructionLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-	instructionLabel.TextSize = 16
-	instructionLabel.Font = Enum.Font.GothamMedium
-	instructionLabel.TextXAlignment = Enum.TextXAlignment.Center
-	instructionLabel.Parent = mainFrame
-
-	local keyTextBox = Instance.new("TextBox")
-	keyTextBox.Name = "KeyTextBox"
-	keyTextBox.Size = UDim2.new(1, -80, 0, 40)
-	keyTextBox.Position = UDim2.new(0, 40, 0, 110)
-	keyTextBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	keyTextBox.BorderColor3 = Color3.fromRGB(80, 80, 80)
-	keyTextBox.BorderSizePixel = 1
-	keyTextBox.Text = ""
-	keyTextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-	keyTextBox.TextSize = 20
-	keyTextBox.Font = Enum.Font.GothamMedium
-	keyTextBox.PlaceholderText = "Masukkan key..."
-	keyTextBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
-	keyTextBox.TextXAlignment = Enum.TextXAlignment.Center
-	keyTextBox.ClearTextOnFocus = false
-	keyTextBox.Parent = mainFrame
-
-	local textBoxCorner = Instance.new("UICorner")
-	textBoxCorner.CornerRadius = UDim.new(0, 6)
-	textBoxCorner.Parent = keyTextBox
-
-	local verifyButton = Instance.new("TextButton")
-	verifyButton.Name = "VerifyButton"
-	verifyButton.Size = UDim2.new(0, 150, 0, 40)
-	verifyButton.Position = UDim2.new(0.5, -75, 0, 175)
-	verifyButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-	verifyButton.BorderColor3 = Color3.fromRGB(80, 80, 80)
-	verifyButton.BorderSizePixel = 1
-	verifyButton.Text = "VERIFIKASI"
-	verifyButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-	verifyButton.TextSize = 16
-	verifyButton.Font = Enum.Font.GothamBold
-	verifyButton.Parent = mainFrame
-
-	local buttonCorner = Instance.new("UICorner")
-	buttonCorner.CornerRadius = UDim.new(0, 6)
-	buttonCorner.Parent = verifyButton
-
-	verifyButton.MouseButton1Click:Connect(function()
-		local enteredKey = keyTextBox.Text
-		if enteredKey == "" then
-			keyTextBox.PlaceholderText = "Key tidak boleh kosong!"
-			keyTextBox.PlaceholderColor3 = Color3.fromRGB(255, 80, 80)
-		elseif enteredKey == "STUDIORIS2024" then
-			screenGui.Enabled = false
-			task.wait(0.5)
-			scanAndApplyAll()
-		else
-			keyTextBox.Text = ""
-			keyTextBox.PlaceholderText = "Key salah! Coba lagi."
-			keyTextBox.PlaceholderColor3 = Color3.fromRGB(255, 80, 80)
-		end
-	end)
-
-	verifyButton.MouseEnter:Connect(function()
-		verifyButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-	end)
-	verifyButton.MouseLeave:Connect(function()
-		verifyButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-	end)
-
-	return screenGui
-end
-
-local function isPartOfColorPalette(obj)
-	if obj.Name == "ColorPalette" then return true end
-	
-	local parent = obj.Parent
-	while parent and parent ~= studioGui do
-		if parent.Name == "ColorPalette" then
-			return true
-		end
-		parent = parent.Parent
+	if selectedBrickText and (selectedBrickText:IsA("TextLabel") or selectedBrickText:IsA("TextButton")) then
+		selectedBrickText.Text = brickName(currentColor)
 	end
-	return false
+
+	if not hexBox:IsFocused() then
+		hexBox.Text = "#" .. currentColor:ToHex():upper()
+	end
+
+	colorPalette:SetAttribute("SelectedColor", currentColor)
 end
 
-local function applyColorPaletteTheme(colorPaletteFrame)
-	if not colorPaletteFrame or colorPaletteFrame.Name ~= "ColorPalette" then return end
-	
-	pcall(function()
-		if colorPaletteFrame.BackgroundTransparency < 1 then
-			colorPaletteFrame.BackgroundColor3 = THEME_V8.FrameColor
-			protectColorProperty(colorPaletteFrame, "BackgroundColor3", THEME_V8.FrameColor)
-		end
-		
-		local existingStroke = colorPaletteFrame:FindFirstChildOfClass("UIStroke")
-		if not existingStroke then
-			local uiStroke = Instance.new("UIStroke")
-			uiStroke.Color = THEME_V8.StrokeColor
-			uiStroke.Thickness = 1.5
-			uiStroke.Parent = colorPaletteFrame
-		end
-		
-		local existingCorner = colorPaletteFrame:FindFirstChildOfClass("UICorner")
-		if not existingCorner then
-			local uiCorner = Instance.new("UICorner")
-			uiCorner.CornerRadius = UDim.new(0, 12)
-			uiCorner.Parent = colorPaletteFrame
-		end
-		
-		colorPaletteFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-		colorPaletteFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-		
-		for _, child in ipairs(colorPaletteFrame:GetDescendants()) do    
-			if child.Name == "OkButton" or child.Name == "CancelButton" then    
-				if child:IsA("TextButton") then    
-					child.TextColor3 = THEME_V8.TextColor    
-					child.BackgroundColor3 = THEME_V8.TextButtonColor    
-					protectColorProperty(child, "TextColor3", THEME_V8.TextColor)    
-					protectColorProperty(child, "BackgroundColor3", THEME_V8.TextButtonColor)    
-				end    
-			elseif child.Name == "BasicColorsTitle" then    
-				if child:IsA("TextLabel") then    
-					child.TextColor3 = THEME_V8.TextColor    
-					if child.BackgroundTransparency < 1 then    
-						child.BackgroundColor3 = THEME_V8.FrameColor    
-					end    
-					protectColorProperty(child, "TextColor3", THEME_V8.TextColor)    
-					if child.BackgroundTransparency < 1 then    
-						protectColorProperty(child, "BackgroundColor3", THEME_V8.FrameColor)    
-					end    
-				end    
-			elseif child.Name == "SelectedColor" or child.Name == "SelectedColorText" or child.Name == "SelectedBrickColorText" then    
-				if child:IsA("TextLabel") then    
-					child.TextColor3 = THEME_V8.TextColor    
-					protectColorProperty(child, "TextColor3", THEME_V8.TextColor)    
-				end    
-			end    
+setColor = function(color, animated)
+	hue, sat, val = color:ToHSV()
+	updateColor()
+	updateIndicators(animated)
+end
+
+---------------------------------------------------------------------
+-- Palette (klik + drag)
+---------------------------------------------------------------------
+local function pulseCrosshair()
+	if not crosshair or not crosshair:IsA("GuiObject") then return end
+	local base = crosshair:GetAttribute("BaseSize")
+	if not base then
+		base = crosshair.Size
+		crosshair:SetAttribute("BaseSize", base)
+	end
+	crosshair.Size = UDim2.new(base.X.Scale, base.X.Offset + 8, base.Y.Scale, base.Y.Offset + 8)
+	tween(crosshair, TWEEN_POP, { Size = base }, "crosshairPulse")
+end
+
+local function handlePalette(pos)
+	if not palette or not palette:IsA("GuiObject") then return end
+	local rx = math.clamp((pos.X - palette.AbsolutePosition.X) / palette.AbsoluteSize.X, 0, 1)
+	local ry = math.clamp((pos.Y - palette.AbsolutePosition.Y) / palette.AbsoluteSize.Y, 0, 1)
+	hue = rx
+	sat = 1 - ry
+	updateColor()
+	updateIndicators(true)
+end
+
+local function handleDarkness(pos)
+	if not darkness or not darkness:IsA("GuiObject") then return end
+	local ry = math.clamp((pos.Y - darkness.AbsolutePosition.Y) / darkness.AbsoluteSize.Y, 0, 1)
+	val = 1 - ry
+	updateColor()
+	updateIndicators(true)
+end
+
+local function isPress(input)
+	return input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+if palette and palette:IsA("GuiButton") then
+	palette.InputBegan:Connect(function(input)
+		if isPress(input) then
+			draggingPalette = true
+			pulseCrosshair()
+			handlePalette(input.Position)
 		end
 	end)
 end
 
-local function protectColorPaletteToggle()
-	for _, descendant in ipairs(studioGui:GetDescendants()) do
-		if descendant:IsA("GuiButton") then
-			local buttonName = descendant.Name
-			if buttonName:find("Color") or buttonName:find("Palette") then
-				if descendant:IsA("TextButton") or descendant:IsA("GuiButton") then
-					pcall(function()
-						local originalTextColor = descendant.TextColor3
-						local originalBgColor = descendant.BackgroundColor3
-						protectColorProperty(descendant, "TextColor3", originalTextColor)
-						protectColorProperty(descendant, "BackgroundColor3", originalBgColor)
-					end)
-				end
+local function bindDarkness(gui)
+	if gui and gui:IsA("GuiObject") then
+		gui.InputBegan:Connect(function(input)
+			if isPress(input) then
+				draggingDarkness = true
+				handleDarkness(input.Position)
 			end
-		end
-	end
-	
-	print("[DEBUG] ColorPalette toggle buttons protected")
-end
-
-local function applyThemeV8(obj)
-	if not obj or not obj.Parent then return end
-
-	if not isInStudioGui(obj) then
-		return
-	end
-
-	local parentCheck = obj
-	while parentCheck do
-		if parentCheck:IsA("ScreenGui") and parentCheck.Name == "StudioRisBoxKey" then
-			return
-		end
-		parentCheck = parentCheck.Parent
-	end
-
-	if isSelectMultiButton(obj) then
-		return
-	end
-
-	if isSettingRigButton(obj) then
-		return
-	end
-
-	if isButtonInFolderInsideColorPalette(obj) then
-		return
-	end
-	
-	if isPartOfColorPalette(obj) and obj.Name ~= "ColorPalette" then
-		return
-	end
-
-	local success, err = pcall(function()
-		local className = obj.ClassName
-
-		if className == "TextLabel" then
-			if not isRedColor(obj.TextColor3) then
-				obj.TextColor3 = THEME_V8.TextColor
-				protectColorProperty(obj, "TextColor3", THEME_V8.TextColor)
-			end
-			if obj.BackgroundTransparency < 1 then
-				obj.BackgroundColor3 = THEME_V8.FrameColor
-				protectColorProperty(obj, "BackgroundColor3", THEME_V8.FrameColor)
-			end
-
-		elseif className == "TextButton" then
-			if not isRedColor(obj.TextColor3) then
-				obj.TextColor3 = THEME_V8.TextColor
-				protectColorProperty(obj, "TextColor3", THEME_V8.TextColor)
-			end
-			if obj.BackgroundTransparency < 1 then
-				obj.BackgroundColor3 = THEME_V8.TextButtonColor
-				protectColorProperty(obj, "BackgroundColor3", THEME_V8.TextButtonColor)
-			end
-
-		elseif className == "TextBox" then
-			if not isRedColor(obj.TextColor3) then
-				obj.TextColor3 = THEME_V8.TextColor
-				protectColorProperty(obj, "TextColor3", THEME_V8.TextColor)
-			end
-			if obj.BackgroundTransparency < 1 then
-				obj.BackgroundColor3 = THEME_V8.TextBoxColor
-				protectColorProperty(obj, "BackgroundColor3", THEME_V8.TextBoxColor)
-			end
-
-		elseif className == "Frame" or className == "ScrollingFrame" then
-			if obj.Name == "ColorPalette" then
-				applyColorPaletteTheme(obj)
-			else
-				if obj.BackgroundTransparency < 1 then
-					obj.BackgroundColor3 = THEME_V8.FrameColor
-					protectColorProperty(obj, "BackgroundColor3", THEME_V8.FrameColor)
-				end
-			end
-
-		elseif className == "ImageLabel" or className == "ImageButton" then
-			if obj.BackgroundTransparency < 1 then
-				obj.BackgroundColor3 = THEME_V8.FrameColor
-				protectColorProperty(obj, "BackgroundColor3", THEME_V8.FrameColor)
-			end
-		end
-	end)
-end
-
-local function setupColorPalette()
-	local function findAllColorPalettes(parent)
-		local colorPalettes = {}
-		for _, child in ipairs(parent:GetChildren()) do
-			if child.Name == "ColorPalette" and child:IsA("Frame") then
-				table.insert(colorPalettes, child)
-			end
-			local subPalettes = findAllColorPalettes(child)
-			for _, p in ipairs(subPalettes) do
-				table.insert(colorPalettes, p)
-			end
-		end
-		return colorPalettes
-	end
-
-	local allColorPalettes = findAllColorPalettes(studioGui)
-
-	if #allColorPalettes == 0 then
-		return
-	end
-
-	for _, colorPalette in ipairs(allColorPalettes) do
-		applyColorPaletteTheme(colorPalette)
-	end
-end
-
-local function recolorEverything()
-	applyThemeV8(studioGui)
-
-	for _, obj in ipairs(studioGui:GetDescendants()) do
-		applyThemeV8(obj)
-	end
-end
-
-local function scanAndApplyAll()
-	recolorEverything()
-	setupColorPalette()
-	
-	task.defer(function()
-		updateSelectImages()
-	end)
-	
-	task.defer(function()
-		setupRotateButton()
-	end)
-	
-	task.defer(function()
-		duplicatePartSelButton()
-	end)
-	
-	task.defer(function()
-		local mainBar = studioGui:FindFirstChild("MainBar")
-		if mainBar then
-			createLineSeparator(mainBar)
-			print("[DEBUG] Line separator dibuat di MainBar")
-		else
-			print("[DEBUG] MainBar tidak ditemukan untuk garis")
-		end
-	end)
-	
-	task.defer(function()
-		protectColorPaletteToggle()
-	end)
-end
-
--- ════════════════════════════════════════════════════════════════════════
--- V10+ ENHANCEMENTS - THEME SWITCHER TOOLBAR
--- ════════════════════════════════════════════════════════════════════════
-
-local function createThemeSwitcherToolbar()
-	local mainBar = studioGui:FindFirstChild("MainBar")
-	if not mainBar then return end
-
-	local existing = mainBar:FindFirstChild("ThemeSwitcherToolbar")
-	if existing then existing:Destroy() end
-
-	local toolbarFrame = Instance.new("Frame")
-	toolbarFrame.Name = "ThemeSwitcherToolbar"
-	toolbarFrame.Size = UDim2.new(0, 850, 0, 28)
-	toolbarFrame.Position = UDim2.new(0, 470, 0, 3)
-	toolbarFrame.BackgroundTransparency = 1
-	toolbarFrame.BorderSizePixel = 0
-	toolbarFrame.Parent = mainBar
-
-	local uiListLayout = Instance.new("UIListLayout")
-	uiListLayout.Parent = toolbarFrame
-	uiListLayout.FillDirection = Enum.FillDirection.Horizontal
-	uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	uiListLayout.Padding = UDim.new(0, 2)
-
-	for themeName, themeData in pairs(THEMES) do
-		local themeBtn = Instance.new("TextButton")
-		themeBtn.Name = themeName
-		themeBtn.Size = UDim2.new(0, 68, 0, 22)
-		themeBtn.BackgroundColor3 = themeData.Button
-		themeBtn.BorderSizePixel = 0
-		themeBtn.Text = themeData.Name
-		themeBtn.TextColor3 = themeData.Text
-		themeBtn.TextSize = 9
-		themeBtn.Font = Enum.Font.GothamBold
-		themeBtn.Parent = toolbarFrame
-
-		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = UDim.new(0, 4)
-		btnCorner.Parent = themeBtn
-
-		themeBtn.MouseButton1Click:Connect(function()
-			CURRENT_THEME = themeData
-			print("🎨 Theme changed: " .. themeData.Name)
 		end)
 	end
 end
+bindDarkness(darkness)
+if darknessAppearance ~= darkness then
+	bindDarkness(darknessAppearance)
+end
 
--- ════════════════════════════════════════════════════════════════════════
--- V10+ ADVANCED CONSOLE
--- ════════════════════════════════════════════════════════════════════════
+handle.InputBegan:Connect(function(input)
+	if isPress(input) then
+		draggingWindow = true
+		dragStart = input.Position
+		dragOrigin = colorPalette.Position
+	end
+end)
 
-local function createAdvancedConsole()
-	local existing = playerGui:FindFirstChild("AdvancedConsoleV8Plus")
-	if existing then return existing end
+UserInputService.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch then
+		if draggingWindow and dragStart then
+			local d = input.Position - dragStart
+			colorPalette.Position = UDim2.new(
+				dragOrigin.X.Scale, dragOrigin.X.Offset + d.X,
+				dragOrigin.Y.Scale, dragOrigin.Y.Offset + d.Y
+			)
+		elseif draggingPalette then
+			handlePalette(input.Position)
+		elseif draggingDarkness then
+			handleDarkness(input.Position)
+		end
+	end
+end)
 
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "AdvancedConsoleV8Plus"
-	screenGui.Parent = playerGui
-	screenGui.ResetOnSpawn = false
+UserInputService.InputEnded:Connect(function(input)
+	if isPress(input) then
+		if draggingWindow then
+			tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundTransparency = 0.2 }, "gripHover")
+		end
+		draggingPalette = false
+		draggingDarkness = false
+		draggingWindow = false
+	end
+end)
 
-	local mainFrame = Instance.new("Frame")
-	mainFrame.Name = "MainFrame"
-	mainFrame.Size = UDim2.new(0, 450, 0, 250)
-	mainFrame.Position = UDim2.new(0, 10, 1, -270)
-	mainFrame.BackgroundColor3 = CURRENT_THEME.Primary
-	mainFrame.BorderSizePixel = 0
-	mainFrame.Parent = screenGui
+---------------------------------------------------------------------
+-- BasicColors
+---------------------------------------------------------------------
+local function bindBasicButton(btn)
+	if not btn:IsA("GuiButton") then return end
+	local baseSize = btn.Size
+	local baseTransparency = btn.BackgroundTransparency
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = mainFrame
+	classicBox(btn)
 
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = CURRENT_THEME.Accent
-	stroke.Thickness = 2
-	stroke.Parent = mainFrame
-
-	-- Header
-	local header = Instance.new("Frame")
-	header.Name = "Header"
-	header.Size = UDim2.new(1, 0, 0, 30)
-	header.BackgroundColor3 = CURRENT_THEME.Accent
-	header.BorderSizePixel = 0
-	header.Parent = mainFrame
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -40, 1, 0)
-	title.BackgroundTransparency = 1
-	title.Text = "📡 Studio Console v8+"
-	title.TextColor3 = CURRENT_THEME.Primary
-	title.TextSize = 12
-	title.Font = Enum.Font.GothamBold
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Parent = header
-
-	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size = UDim2.new(0, 30, 1, 0)
-	closeBtn.Position = UDim2.new(1, -30, 0, 0)
-	closeBtn.BackgroundTransparency = 0.5
-	closeBtn.Text = "✕"
-	closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	closeBtn.TextSize = 14
-	closeBtn.Font = Enum.Font.GothamBold
-	closeBtn.Parent = header
-
-	closeBtn.MouseButton1Click:Connect(function()
-		mainFrame.Visible = not mainFrame.Visible
+	btn.MouseEnter:Connect(function()
+		tween(btn, TWEEN_FAST, {
+			Size = UDim2.new(baseSize.X.Scale, baseSize.X.Offset + 4, baseSize.Y.Scale, baseSize.Y.Offset + 4),
+		}, btn)
 	end)
-
-	-- Output
-	local outputFrame = Instance.new("ScrollingFrame")
-	outputFrame.Name = "Output"
-	outputFrame.Size = UDim2.new(1, -10, 1, -40)
-	outputFrame.Position = UDim2.new(0, 5, 0, 35)
-	outputFrame.BackgroundTransparency = 1
-	outputFrame.BorderSizePixel = 0
-	outputFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
-	outputFrame.Parent = mainFrame
-
-	local uiListLayout = Instance.new("UIListLayout")
-	uiListLayout.Parent = outputFrame
-	uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-
-	_G.LogConsoleV8Plus = function(message, color, icon)
-		icon = icon or "▶"
-		color = color or CURRENT_THEME.Text
-		
-		local logLabel = Instance.new("TextLabel")
-		logLabel.Name = "Log"
-		logLabel.Size = UDim2.new(1, -5, 0, 18)
-		logLabel.BackgroundTransparency = 1
-		logLabel.Text = icon .. " " .. tostring(message)
-		logLabel.TextColor3 = color
-		logLabel.TextSize = 10
-		logLabel.Font = Enum.Font.Roboto
-		logLabel.TextXAlignment = Enum.TextXAlignment.Left
-		logLabel.TextWrapped = true
-		logLabel.Parent = outputFrame
-
-		outputFrame.CanvasSize = UDim2.new(0, 0, 0, uiListLayout.AbsoluteContentSize.Y)
-		outputFrame.CanvasPosition = Vector3.new(0, math.huge)
-	end
-
-	_G.LogConsoleV8Plus("✅ ThemeRecolor v8+ Enhanced SUPREME loaded!", CURRENT_THEME.Success, "✨")
-	_G.LogConsoleV8Plus("🚀 All v8 features preserved + v10 MEGA enhancements", CURRENT_THEME.Accent, "🎉")
-
-	return screenGui
-end
-
--- ════════════════════════════════════════════════════════════════════════
--- INITIALIZATION
--- ════════════════════════════════════════════════════════════════════════
-
-local function initialize()
-	print("╔════════════════════════════════════════════════════════════════════════╗")
-	print("║          🚀 ThemeRecolor v8+ ENHANCED SUPREME - INITIALIZING          ║")
-	print("║          Gabung v8 (1200+ lines) + v10 MEGA (500+ features)          ║")
-	print("║                        TIDAK ADA YANG DIHAPUS!                       ║")
-	print("╚════════════════════════════════════════════════════════════════════════╝")
-
-	-- Create box key
-	local boxKey = createStudioRisBoxKey()
-
-	-- Wait then apply
-	task.wait(0.5)
-	scanAndApplyAll()
-
-	-- Scan ulang
-	task.spawn(function()
-		for i = 1, 10 do
-			task.wait(0.5)
-			scanAndApplyAll()
-		end
+	btn.MouseLeave:Connect(function()
+		tween(btn, TWEEN_FAST, { Size = baseSize }, btn)
 	end)
-
-	-- Auto-apply ke elemen baru
-	studioGui.DescendantAdded:Connect(function(obj)
-		if not isInStudioGui(obj) then
-			return
-		end
-		
-		if isSettingRigButton(obj) then
-			return
-		end
-		
-		local parentCheck = obj.Parent
-		while parentCheck and parentCheck ~= studioGui do
-			if isSettingRigButton(parentCheck) then
-				return
-			end
-			parentCheck = parentCheck.Parent
-		end
-		
-		applyThemeV8(obj)
-
-		if obj.Name == "ColorPalette" then
-			task.defer(function()
-				setupColorPalette()
-			end)
-		end
-
-		if obj:IsA("TextButton") and isButtonInFolderInsideColorPalette(obj) then
-			return
-		end
-
-		if isSelectMultiButton(obj) then
-			return
-		end
+	btn.MouseButton1Click:Connect(function()
+		setColor(btn.BackgroundColor3, true)
+		pulseCrosshair()
+		btn.BackgroundTransparency = 0.5
+		tween(btn, TWEEN_MED, { BackgroundTransparency = baseTransparency }, btn.Name .. "_flash")
 	end)
-
-	-- Create enhancements
-	task.defer(function() createThemeSwitcherToolbar() end)
-	task.defer(function() createAdvancedConsole() end)
-
-	print("✅ v8 Original Code - 100% Preserved")
-	print("✅ Theme Switcher Toolbar (11 Themes) - Created")
-	print("✅ Advanced Console v8+ - Created")
-	print("")
-	print("🎨 Available Themes:")
-	for themeName, themeData in pairs(THEMES) do
-		print("  • " .. themeData.Name)
-	end
-	print("")
-	print("🔒 Protected Elements:")
-	print("  • settingrigbtn (100% Protected)")
-	print("  • Select MultiButton")
-	print("  • ColorPalette")
-	print("  • StudioRisBoxKey")
-	print("")
-	print("═══════════════════════════════════════════════════════════════════════")
-	print("✨ ThemeRecolor v8+ ENHANCED SUPREME - READY FOR PRODUCTION!")
-	print("═══════════════════════════════════════════════════════════════════════")
 end
 
--- Border cleanup (from v8)
-local mainBar = studioGui:FindFirstChild("MainBar", true)
-
-if mainBar then
-	if mainBar:IsA("Frame") or mainBar:IsA("TextButton") or mainBar:IsA("TextLabel") or mainBar:IsA("ImageButton") or mainBar:IsA("ImageLabel") or mainBar:IsA("ScrollingFrame") then
-		mainBar.BorderSizePixel = 0
+if basicColors then
+	for _, child in ipairs(basicColors:GetChildren()) do
+		bindBasicButton(child)
 	end
-
-	for _, obj in ipairs(mainBar:GetDescendants()) do
-		local insideTopbar = false
-		local topbar = mainBar:FindFirstChild("Topbar", true)
-
-		if topbar and (obj == topbar or topbar:IsAncestorOf(obj)) then
-			insideTopbar = true
-		end
-
-		if not insideTopbar then
-			if obj:IsA("UIStroke") then
-				obj:Destroy()
-			elseif obj:IsA("Frame") or obj:IsA("TextButton") or obj:IsA("TextLabel") or obj:IsA("ImageButton") or obj:IsA("ImageLabel") or obj:IsA("ScrollingFrame") then
-				obj.BorderSizePixel = 0
-			end
-		end
-	end
-
-	local topbar = mainBar:FindFirstChild("Topbar", true)
-	if topbar then
-		for _, obj in ipairs(topbar:GetDescendants()) do
-			if obj:IsA("UIStroke") then
-				obj:Destroy()
-			elseif obj:IsA("Frame") or obj:IsA("TextButton") or obj:IsA("TextLabel") or obj:IsA("ImageButton") or obj:IsA("ImageLabel") or obj:IsA("ScrollingFrame") then
-				obj.BorderSizePixel = 0
-			end
-		end
-	end
-
-	print("✅ Border & UIStroke dibersihkan")
+	basicColors.ChildAdded:Connect(bindBasicButton)
 end
 
-task.wait(2)
-
--- File menu (from v8)
-local topBar = studioGui:WaitForChild("TopBar")
-local fileMenu = topBar:WaitForChild("FileMenu")
-
-fileMenu.Parent = topBar
-fileMenu.Visible = true
-fileMenu.Size = UDim2.new(0.566, 0, 0, 20)
-fileMenu.Position = UDim2.new(0, 0, 0, 0)
-fileMenu.BackgroundTransparency = 1
-fileMenu.BorderSizePixel = 0
-
-fileMenu:GetPropertyChangedSignal("Visible"):Connect(function()
-	fileMenu.Visible = true
+---------------------------------------------------------------------
+-- Hex input + Random
+---------------------------------------------------------------------
+hexBox.Focused:Connect(function()
+	tween(hexStroke, TWEEN_FAST, { Thickness = 2.5, Color = Color3.fromRGB(0, 162, 255) }, "hexFocus")
 end)
 
-task.spawn(function()
-	while task.wait(0.5) do
-		fileMenu.Visible = true
+hexBox.FocusLost:Connect(function()
+	tween(hexStroke, TWEEN_FAST, { Thickness = 1.5, Color = CLASSIC_DARK }, "hexFocus")
+	local txt = hexBox.Text:gsub("[^%x]", "")
+	if #txt == 3 then
+		txt = txt:sub(1, 1):rep(2) .. txt:sub(2, 2):rep(2) .. txt:sub(3, 3):rep(2)
 	end
-end)
-
-for _, obj in ipairs(topBar:GetChildren()) do
-	if obj ~= fileMenu then
-		if obj:IsA("TextButton") or obj:IsA("ImageButton") then
-			obj:Destroy()
+	if #txt == 6 then
+		local ok, c = pcall(Color3.fromHex, "#" .. txt)
+		if ok and c then
+			setColor(c, true)
+			pulseCrosshair()
+			return
 		end
 	end
-end
-
-for _, v in ipairs(fileMenu:GetChildren()) do
-	if v:IsA("UIGridLayout") or v:IsA("UIListLayout") then
-		v:Destroy()
+	local base = hexBox.Position
+	for _, off in ipairs({ 6, -6, 4, -4, 0 }) do
+		hexBox.Position = UDim2.new(base.X.Scale, base.X.Offset + off, base.Y.Scale, base.Y.Offset)
+		task.wait(0.03)
 	end
-end
-
-local grid = Instance.new("UIGridLayout")
-grid.Parent = fileMenu
-grid.CellSize = UDim2.new(0, 90, 0, 18)
-grid.CellPadding = UDim2.new(0, 4, 0, 3)
-grid.FillDirection = Enum.FillDirection.Horizontal
-grid.SortOrder = Enum.SortOrder.LayoutOrder
-grid.HorizontalAlignment = Enum.HorizontalAlignment.Left
-grid.VerticalAlignment = Enum.VerticalAlignment.Center
-
-local function clean(obj)
-	if obj:IsA("TextButton") then
-		obj.Text = string.gsub(obj.Text or "", "%.%.%.", "")
-		obj.Size = UDim2.new(0, 40, 0, 18)
-		obj.BorderSizePixel = 0
-		obj.BackgroundTransparency = 0.2
-	elseif obj:IsA("ImageButton") then
-		obj.BorderSizePixel = 0
-	end
-end
-
-for _, obj in ipairs(fileMenu:GetChildren()) do
-	clean(obj)
-end
-
-fileMenu.ChildAdded:Connect(function(obj)
-	task.wait()
-	clean(obj)
+	hexBox.Text = "#" .. currentColor:ToHex():upper()
 end)
 
-fileMenu.DescendantAdded:Connect(function(obj)
-	task.wait()
-	clean(obj)
+local function randomColor()
+	hue, sat, val = math.random(), 0.4 + math.random() * 0.6, 0.5 + math.random() * 0.5
+	updateColor()
+	updateIndicators(true)
+	pulseCrosshair()
+end
+
+randomBtn.MouseEnter:Connect(function()
+	tween(randomBtn, TWEEN_FAST, { BackgroundColor3 = Color3.fromRGB(60, 190, 255) }, "rndHover")
+end)
+randomBtn.MouseLeave:Connect(function()
+	tween(randomBtn, TWEEN_FAST, { BackgroundColor3 = Color3.fromRGB(0, 162, 255) }, "rndHover")
+end)
+randomBtn.MouseButton1Click:Connect(randomColor)
+
+---------------------------------------------------------------------
+-- Close + Confirm + Cancel
+---------------------------------------------------------------------
+local function closePicker()
+	if closing then return end
+	closing = true
+	local t = tween(colorPalette, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+		Size = UDim2.new(originalSize.X.Scale * 0.8, originalSize.X.Offset * 0.8,
+			originalSize.Y.Scale * 0.8, originalSize.Y.Offset * 0.8),
+	}, "closeTween")
+	if t then t.Completed:Wait() end
+	colorPalette.Visible = false
+	colorPalette.Size = originalSize
+	closing = false
+end
+
+local baseTextSize = (okButton and okButton:IsA("TextButton")) and okButton.TextSize or nil
+
+local function confirm()
+	local r, g, b = to255(currentColor)
+	print(string.format("[ColorPalette] Warna dipilih: %d, %d, %d (%s) #%s",
+		r, g, b, brickName(currentColor), currentColor:ToHex():upper()))
+	colorPalette:SetAttribute("SelectedColor", currentColor)
+	colorPalette:SetAttribute("SelectedHex", "#" .. currentColor:ToHex():upper())
+	colorPalette:SetAttribute("Confirmed", (colorPalette:GetAttribute("Confirmed") or 0) + 1)
+	pushHistory(currentColor)
+	if baseTextSize then
+		okButton.TextSize = baseTextSize + 6
+		tween(okButton, TWEEN_POP, { TextSize = baseTextSize }, "okText")
+	end
+	task.spawn(closePicker)
+end
+
+local function cancel()
+	setColor(openColor, false)
+	task.spawn(closePicker)
+end
+
+if okButton and okButton:IsA("GuiButton") then
+	okButton.MouseEnter:Connect(function()
+		tween(okButton, TWEEN_FAST, { BackgroundTransparency = 0.15 }, "okHover")
+	end)
+	okButton.MouseLeave:Connect(function()
+		tween(okButton, TWEEN_FAST, { BackgroundTransparency = 0 }, "okHover")
+	end)
+	okButton.MouseButton1Click:Connect(confirm)
+end
+
+if cancelButton and cancelButton:IsA("GuiButton") then
+	cancelButton.MouseEnter:Connect(function()
+		tween(cancelButton, TWEEN_FAST, { BackgroundTransparency = 0.15 }, "cancelHover")
+	end)
+	cancelButton.MouseLeave:Connect(function()
+		tween(cancelButton, TWEEN_FAST, { BackgroundTransparency = 0 }, "cancelHover")
+	end)
+	cancelButton.MouseButton1Click:Connect(cancel)
+end
+
+---------------------------------------------------------------------
+-- Shortcut keyboard
+-- Enter = OK | Esc = batal | R = random
+-- Panah = hue/saturasi | PageUp/PageDown = terang/gelap | Shift = cepat
+---------------------------------------------------------------------
+UserInputService.InputBegan:Connect(function(input, gpe)
+	if gpe or not colorPalette.Visible or closing then return end
+	local step = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 0.05 or 0.01
+	local k = input.KeyCode
+	if k == Enum.KeyCode.Return or k == Enum.KeyCode.KeypadEnter then
+		confirm()
+	elseif k == Enum.KeyCode.Escape then
+		cancel()
+	elseif k == Enum.KeyCode.R then
+		randomColor()
+	elseif k == Enum.KeyCode.Left then
+		hue = (hue - step) % 1
+		updateColor(); updateIndicators(true)
+	elseif k == Enum.KeyCode.Right then
+		hue = (hue + step) % 1
+		updateColor(); updateIndicators(true)
+	elseif k == Enum.KeyCode.Up then
+		sat = math.clamp(sat + step, 0, 1)
+		updateColor(); updateIndicators(true)
+	elseif k == Enum.KeyCode.Down then
+		sat = math.clamp(sat - step, 0, 1)
+		updateColor(); updateIndicators(true)
+	elseif k == Enum.KeyCode.PageUp then
+		val = math.clamp(val + step, 0, 1)
+		updateColor(); updateIndicators(true)
+	elseif k == Enum.KeyCode.PageDown then
+		val = math.clamp(val - step, 0, 1)
+		updateColor(); updateIndicators(true)
+	end
 end)
 
--- RIG Panel (from v8)
-local remoteEvent = ReplicatedStorage:FindFirstChild("RigChangeEvent")
-if not remoteEvent then
-	remoteEvent = Instance.new("RemoteEvent")
-	remoteEvent.Name = "RigChangeEvent"
-	remoteEvent.Parent = ReplicatedStorage
+---------------------------------------------------------------------
+-- Animasi saat dibuka & update layout
+---------------------------------------------------------------------
+colorPalette:GetPropertyChangedSignal("Visible"):Connect(function()
+	if colorPalette.Visible and not closing then
+		openColor = currentColor
+		colorPalette.Size = UDim2.new(originalSize.X.Scale * 0.85, originalSize.X.Offset * 0.85,
+			originalSize.Y.Scale * 0.85, originalSize.Y.Offset * 0.85)
+		tween(colorPalette, TWEEN_POP, { Size = originalSize }, "openTween")
+		task.defer(function()
+			updateIndicators(false)
+		end)
+	end
+end)
+
+if palette and palette:IsA("GuiObject") then
+	palette:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+		updateIndicators(false)
+	end)
+	palette:GetPropertyChangedSignal("AbsolutePosition"):Connect(function()
+		if not draggingPalette then updateIndicators(false) end
+	end)
 end
 
-local mainBarForRig = playerGui:FindFirstChild("MainBar", true)
-
-if mainBarForRig then
-	local targetScreenGui = mainBarForRig.Parent 
-	
-	if targetScreenGui and targetScreenGui:IsA("ScreenGui") then
-		
-		local oldBtn = mainBarForRig:FindFirstChild("settingrigbtn", true)
-		if oldBtn then oldBtn:Destroy() end
-
-		local originalBtn = mainBarForRig:FindFirstChild("partsel", true)
-
-		if originalBtn and originalBtn:IsA("GuiButton") then
-
-			local btn = originalBtn:Clone()
-			btn.Name = "settingrigbtn"
-			btn.Parent = mainBarForRig
-			btn.Position = UDim2.new(0, 365, 0, 3)
-			btn.Text = "R6 / R15"
-
-			local oldPanel = targetScreenGui:FindFirstChild("RigPanel")
-			if oldPanel then oldPanel:Destroy() end
-
-			local panel = Instance.new("Frame")
-			panel.Name = "RigPanel"
-			panel.Parent = targetScreenGui
-			panel.Size = UDim2.new(0, 260, 0, 220)
-			panel.Position = UDim2.new(0.5, 0, 0.5, 0)
-			panel.AnchorPoint = Vector2.new(0.5, 0.5)
-			panel.BackgroundColor3 = Color3.fromRGB(25,25,25)
-			panel.BorderSizePixel = 0
-			panel.Visible = false
-
-			Instance.new("UICorner", panel).CornerRadius = UDim.new(0,10)
-
-			btn.MouseButton1Click:Connect(function()
-				panel.Visible = not panel.Visible
-			end)
-
-			local allToggles = {}
-
-			local function createToggle(y, title, desc, modeValue)
-				local holder = Instance.new("Frame")
-				holder.Parent = panel
-				holder.Size = UDim2.new(1, -20, 0, 55)
-				holder.Position = UDim2.new(0, 10, 0, y)
-				holder.BackgroundTransparency = 1
-
-				local t = Instance.new("TextLabel")
-				t.Parent = holder
-				t.Size = UDim2.new(1, 0, 0, 25)
-				t.BackgroundTransparency = 1
-				t.Text = title
-				t.TextColor3 = Color3.fromRGB(255,255,255)
-				t.TextXAlignment = Enum.TextXAlignment.Left
-				t.Font = Enum.Font.SourceSansBold
-				t.TextSize = 16
-
-				local d = Instance.new("TextLabel")
-				d.Parent = holder
-				d.Position = UDim2.new(0, 0, 0, 25)
-				d.Size = UDim2.new(1, 0, 0, 20)
-				d.BackgroundTransparency = 1
-				d.Text = desc
-				d.TextColor3 = Color3.fromRGB(180,180,180)
-				d.TextXAlignment = Enum.TextXAlignment.Left
-				d.Font = Enum.Font.SourceSans
-				d.TextSize = 13
-
-				local switch = Instance.new("TextButton")
-				switch.Parent = holder
-				switch.Size = UDim2.new(0, 40, 0, 20)
-				switch.Position = UDim2.new(1, -50, 0.5, -10)
-				switch.BackgroundColor3 = Color3.fromRGB(80,80,80)
-				switch.BorderSizePixel = 0
-				switch.Text = ""
-				switch.AutoButtonColor = false
-
-				Instance.new("UICorner", switch).CornerRadius = UDim.new(1,0)
-
-				local circle = Instance.new("Frame")
-				circle.Parent = switch
-				circle.Size = UDim2.new(0, 16, 0, 16)
-				circle.Position = UDim2.new(0, 2, 0.5, -8)
-				circle.BackgroundColor3 = Color3.fromRGB(255,255,255)
-				circle.BorderSizePixel = 0
-
-				Instance.new("UICorner", circle).CornerRadius = UDim.new(1,0)
-
-				local toggleData = {
-					Active = false,
-					Mode = modeValue,
-					UpdateVisual = function(self)
-						if self.Active then
-							switch.BackgroundColor3 = Color3.fromRGB(0,200,100)
-							circle:TweenPosition(UDim2.new(1,-18,0.5,-8),"Out","Quad",0.15,true)
-						else
-							switch.BackgroundColor3 = Color3.fromRGB(80,80,80)
-							circle:TweenPosition(UDim2.new(0,2,0.5,-8),"Out","Quad",0.15,true)
-						end
-					end
-				}
-				
-				table.insert(allToggles, toggleData)
-
-				switch.MouseButton1Click:Connect(function()
-					if toggleData.Active then
-						toggleData.Active = false
-						toggleData:UpdateVisual()
-						remoteEvent:FireServer("DEFAULT")
-					else
-						for _, tog in ipairs(allToggles) do
-							tog.Active = false
-							tog:UpdateVisual()
-						end
-						toggleData.Active = true
-						toggleData:UpdateVisual()
-						remoteEvent:FireServer(toggleData.Mode)
-					end
-				end)
-
-				if modeValue == "R15" then
-					toggleData.Active = true
-				end
-				
-				toggleData:UpdateVisual()
-			end
-
-			createToggle(10,  "R15 CHAR", "Char akan menjadi R15", "R15")
-			createToggle(70,  "R6 CHAR", "Char akan menjadi R6", "R6")
-			createToggle(130, "R6 & R15 CHAR", "Random R6 / R15", "RANDOM")
-		end
+---------------------------------------------------------------------
+-- Inisialisasi
+---------------------------------------------------------------------
+task.wait()
+local startColor = colorPalette:GetAttribute("SelectedColor")
+if typeof(startColor) ~= "Color3" then
+	if selectedColorFrame and selectedColorFrame:IsA("GuiObject") then
+		startColor = selectedColorFrame.BackgroundColor3
+	else
+		startColor = Color3.fromRGB(163, 162, 165)
 	end
 end
-
-task.wait(1)
-initialize()
-
-print("═══════════════════════════════════════════════════════════════════════")
-print("🚀 ThemeRecolor v8+ ENHANCED SUPREME - FULLY LOADED AND READY!")
-print("═══════════════════════════════════════════════════════════════════════")
-
--- Export untuk global access
-_G.ThemeRecolorV8Plus = {
-	CurrentTheme = CURRENT_THEME,
-	Log = _G.LogConsoleV8Plus,
-	Themes = THEMES,
-}
+setColor(startColor, false)
+openColor = currentColor
+refreshHistory()
