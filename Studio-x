@@ -1197,19 +1197,31 @@ if cancelButton and cancelButton:IsA("GuiButton") then
 end
 
 ---------------------------------------------------------------------
--- Klik di luar frame = tutup
+-- Klik di luar frame = tutup (aman untuk toggle)
 ---------------------------------------------------------------------
 local function insideGui(gui, pos)
 	local p, s = gui.AbsolutePosition, gui.AbsoluteSize
 	return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
 end
 
+local pressOutside = false
+local pressTime = 0
+
 UserInputService.InputBegan:Connect(function(input)
 	if not isPress(input) then return end
+	pressOutside = false
 	if not colorPalette.Visible or closing then return end
-	if os.clock() - openedAt < 0.25 then return end
 	local pos = input.Position
 	if insideGui(colorPalette, pos) or insideGui(extras, pos) then return end
+	pressOutside = true
+	pressTime = os.clock()
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if not isPress(input) or not pressOutside then return end
+	pressOutside = false
+	if not colorPalette.Visible or closing then return end
+	if openedAt > pressTime then return end -- frame baru dibuka setelah klik ini (toggle)
 	cancel(true)
 end)
 
