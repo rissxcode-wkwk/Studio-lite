@@ -1,4 +1,4 @@
--- LocalScript: ColorPalette controller v4 (tanpa script.Parent, toggle tidak diubah)
+-- LocalScript: ColorPalette controller v5 (Roblox Studio theme, tanpa script.Parent, toggle tidak diubah)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -35,6 +35,12 @@ local function find(name)
 	return colorPalette:FindFirstChild(name, true)
 end
 
+-- bersihkan sisa runtime kalau script jalan ulang
+for _, n in ipairs({ "Extras", "DragHandle" }) do
+	local o = colorPalette:FindFirstChild(n)
+	if o then o:Destroy() end
+end
+
 local basicColors = find("BasicColors")
 local palette = find("Palette")
 local crosshair = find("ColorPaletteCrosshairs")
@@ -48,14 +54,25 @@ local selectedColorFrame = find("SelectedColor")
 local selectedColorText = find("SelectedColorText")
 
 ---------------------------------------------------------------------
--- Posisi di tengah layar
+-- Theme Roblox Studio (dark)
 ---------------------------------------------------------------------
-colorPalette.AnchorPoint = Vector2.new(0.5, 0.5)
-colorPalette.Position = UDim2.new(0.5, 0, 0.5, 0)
+local THEME = {
+	bg = Color3.fromRGB(46, 46, 46),
+	panel = Color3.fromRGB(37, 37, 37),
+	input = Color3.fromRGB(30, 30, 30),
+	border = Color3.fromRGB(22, 22, 22),
+	border2 = Color3.fromRGB(72, 72, 72),
+	text = Color3.fromRGB(204, 204, 204),
+	textDim = Color3.fromRGB(140, 140, 140),
+	accent = Color3.fromRGB(0, 162, 255),
+	accentHover = Color3.fromRGB(51, 184, 255),
+	btn = Color3.fromRGB(62, 62, 62),
+	btnHover = Color3.fromRGB(80, 80, 80),
+}
 
-if clickBlocker and clickBlocker:IsA("GuiObject") then
-	clickBlocker.Active = true
-end
+local EXTRA_W = 250
+local MAX_HISTORY = 8
+local MAX_FAV = 16
 
 ---------------------------------------------------------------------
 -- State
@@ -66,14 +83,16 @@ local openColor = currentColor
 local draggingPalette = false
 local draggingDarkness = false
 local draggingWindow = false
+local hoverWheel = 0
 local dragStart, dragOrigin
 local closing = false
+local openedAt = 0
+local closedOutsideAt = nil
 local originalSize = colorPalette.Size
-local MAX_HISTORY = 8
-local history = {
-	Color3.fromRGB(255, 0, 0), Color3.fromRGB(255, 136, 0), Color3.fromRGB(255, 255, 0), Color3.fromRGB(0, 200, 0),
-	Color3.fromRGB(0, 200, 255), Color3.fromRGB(0, 0, 255), Color3.fromRGB(170, 0, 255), Color3.fromRGB(255, 255, 255),
-}
+local history = {}
+local favorites = {}
+local undoStack, redoStack = {}, {}
+local lastSnap = 0
 
 local TWEEN_FAST = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local TWEEN_MED = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -102,6 +121,12 @@ local function to255(c)
 		math.clamp(math.round(c.B * 255), 0, 255)
 end
 
+local function same(a, b)
+	local r1, g1, b1 = to255(a)
+	local r2, g2, b2 = to255(b)
+	return r1 == r2 and g1 == g2 and b1 == b2
+end
+
 local function setInParent(gui, absX, absY, tweenInfo, extraKey)
 	if not gui or not gui:IsA("GuiObject") then return end
 	local parent = gui.Parent
@@ -118,13 +143,11 @@ local function setInParent(gui, absX, absY, tweenInfo, extraKey)
 end
 
 local function brickName(color)
-	local r, g, b = to255(color)
 	local bc = BrickColor.new(color)
-	local br, bg, bb = to255(bc.Color)
-	if r == br and g == bg and b == bb then
-		return bc.Name
+	if same(color, bc.Color) then
+		return bc.Name, true
 	end
-	return "Custom"
+	return bc.Name, false
 end
 
 local function addCorner(gui, radius)
@@ -144,50 +167,109 @@ local function addStroke(gui, color, thickness, transparency)
 	return s
 end
 
-local function same(a, b)
-	local r1, g1, b1 = to255(a)
-	local r2, g2, b2 = to255(b)
-	return r1 == r2 and g1 == g2 and b1 == b2
+local function lin(c)
+	return c <= 0.03928 and c / 12.92 or ((c + 0.055) / 1.055) ^ 2.4
+end
+local function luminance(c)
+	return 0.2126 * lin(c.R) + 0.7152 * lin(c.G) + 0.0722 * lin(c.B)
+end
+local function contrast(a, b)
+	local l1, l2 = luminance(a), luminance(b)
+	if l1 < l2 then l1, l2 = l2, l1 end
+	return (l1 + 0.05) / (l2 + 0.05)
+end
+
+local function parseHex(txt)
+	txt = txt:gsub("[^%x]", "")
+	if #txt == 3 then
+		txt = txt:sub(1, 1):rep(2) .. txt:sub(2, 2):rep(2) .. txt:sub(3, 3):rep(2)
+	end
+	if #txt == 6 then
+		local ok, c = pcall(Color3.fromHex, "#" .. txt)
+		if ok then return c end
+	end
+	return nil
 end
 
 ---------------------------------------------------------------------
--- Stroke classic (solid, tanpa rainbow)
+-- Theme frame utama
 ---------------------------------------------------------------------
-local CLASSIC_DARK = Color3.fromRGB(27, 42, 53)
-local CLASSIC_LIGHT = Color3.fromRGB(255, 255, 255)
+colorPalette.AnchorPoint = Vector2.new(0.5, 0.5)
+colorPalette.Position = UDim2.new(0.5, -(EXTRA_W + 8) / 2, 0.5, 0)
+colorPalette.BackgroundColor3 = THEME.bg
+colorPalette.BackgroundTransparency = 0
+colorPalette.BorderSizePixel = 0
+colorPalette.ClipsDescendants = false
+if colorPalette:IsA("ImageLabel") or colorPalette:IsA("ImageButton") then
+	colorPalette.ImageTransparency = 1
+end
+addCorner(colorPalette, 4)
+addStroke(colorPalette, THEME.border, 2, 0)
 
-addCorner(colorPalette, 6)
-addStroke(colorPalette, CLASSIC_DARK, 2, 0)
+if clickBlocker and clickBlocker:IsA("GuiObject") then
+	clickBlocker.Active = true
+end
 
-local function classicBox(gui)
-	if gui and gui:IsA("GuiObject") then
-		if not gui:FindFirstChildOfClass("UICorner") then addCorner(gui, 3) end
-		if not gui:FindFirstChildOfClass("UIStroke") then addStroke(gui, CLASSIC_DARK, 1.5, 0) end
+-- label teks jadi tema Studio
+for _, d in ipairs(colorPalette:GetDescendants()) do
+	if d:IsA("TextLabel") and d ~= selectedColorFrame
+		and not (basicColors and d:IsDescendantOf(basicColors)) then
+		d.TextColor3 = THEME.text
+		d.BackgroundTransparency = 1
+		d.Font = Enum.Font.SourceSans
 	end
 end
 
-classicBox(palette)
-classicBox(darkness)
-classicBox(selectedColorFrame)
-classicBox(okButton)
-classicBox(cancelButton)
+local function studioBox(gui, strokeColor)
+	if gui and gui:IsA("GuiObject") then
+		if not gui:FindFirstChildOfClass("UICorner") then addCorner(gui, 3) end
+		if not gui:FindFirstChildOfClass("UIStroke") then
+			addStroke(gui, strokeColor or THEME.border, 1.5, 0)
+		end
+	end
+end
+
+studioBox(palette, THEME.border2)
+studioBox(darkness, THEME.border2)
+studioBox(selectedColorFrame, THEME.border2)
+
+local function styleActionButton(btn, baseColor, hoverColor, textColor)
+	if not btn or not btn:IsA("GuiButton") then return end
+	btn.AutoButtonColor = false
+	btn.BackgroundColor3 = baseColor
+	btn.BackgroundTransparency = 0
+	btn.BorderSizePixel = 0
+	if btn:IsA("TextButton") then
+		btn.TextColor3 = textColor
+		btn.Font = Enum.Font.SourceSansBold
+	end
+	studioBox(btn, THEME.border)
+	btn.MouseEnter:Connect(function()
+		tween(btn, TWEEN_FAST, { BackgroundColor3 = hoverColor }, "hov" .. btn.Name)
+	end)
+	btn.MouseLeave:Connect(function()
+		tween(btn, TWEEN_FAST, { BackgroundColor3 = baseColor }, "hov" .. btn.Name)
+	end)
+end
+styleActionButton(okButton, THEME.accent, THEME.accentHover, Color3.new(1, 1, 1))
+styleActionButton(cancelButton, THEME.btn, THEME.btnHover, THEME.text)
 
 ---------------------------------------------------------------------
--- Palette gradient (hue X, saturasi Y) + gelap sesuai Darkness
--- ZIndex dibuat relatif ke palette supaya gradient tidak tertutup
+-- Palette gradient AKURAT
+-- X = hue, Y = saturasi (atas penuh, bawah putih), overlay hitam = Darkness
 ---------------------------------------------------------------------
 local darkOverlay, darkGradient
 local paletteZ = 1
 
 if palette and palette:IsA("GuiObject") then
 	paletteZ = palette.ZIndex
+	palette.Active = true
 	palette.BackgroundTransparency = 1
 	palette.ClipsDescendants = true
 	if palette:IsA("ImageButton") or palette:IsA("ImageLabel") then
 		palette.ImageTransparency = 1
 	end
 
-	-- hapus layer lama kalau script jalan ulang
 	for _, n in ipairs({ "HueLayer", "SatLayer", "DarkLayer" }) do
 		local old = palette:FindFirstChild(n)
 		if old then old:Destroy() end
@@ -196,20 +278,19 @@ if palette and palette:IsA("GuiObject") then
 	local function layer(name, z)
 		local f = Instance.new("Frame")
 		f.Name = name
-		f.AnchorPoint = Vector2.new(0, 0)
 		f.Position = UDim2.fromScale(0, 0)
 		f.Size = UDim2.fromScale(1, 1)
 		f.BorderSizePixel = 0
 		f.Active = false
-		f.Visible = true
 		f.ZIndex = paletteZ + z
 		f.BackgroundTransparency = 0
 		f.BackgroundColor3 = Color3.new(1, 1, 1)
 		f.Parent = palette
+		addCorner(f, 3)
 		return f
 	end
 
-	-- Layer 1: pelangi horizontal
+	-- 1) Pelangi horizontal
 	local base = layer("HueLayer", 1)
 	local hg = Instance.new("UIGradient")
 	local keys = {}
@@ -220,10 +301,8 @@ if palette and palette:IsA("GuiObject") then
 	hg.Rotation = 0
 	hg.Parent = base
 
-	-- Layer 2: putih (atas = pekat -> bawah = hilang) => saturasi
-	-- Atas saturasi 0 (putih), bawah saturasi 1 (warna penuh)
+	-- 2) Putih: atas transparan (sat 1) -> bawah pekat (sat 0)
 	local satLayer = layer("SatLayer", 2)
-	satLayer.BackgroundColor3 = Color3.new(1, 1, 1)
 	local sg = Instance.new("UIGradient")
 	sg.Rotation = 90
 	sg.Transparency = NumberSequence.new({
@@ -232,17 +311,10 @@ if palette and palette:IsA("GuiObject") then
 	})
 	sg.Parent = satLayer
 
-	-- Layer 3: hitam, transparansi diatur lewat Darkness
+	-- 3) Hitam: transparansi = val (val 1 = terang, val 0 = gelap total)
 	darkOverlay = layer("DarkLayer", 3)
 	darkOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
-	darkOverlay.BackgroundTransparency = 1 - (1 - val)
-
-	-- Palette mengikuti urutan: atas = saturasi tinggi.
-	-- Dibalik supaya cocok dengan rumus sat = 1 - ry
-	sg.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0),
-		NumberSequenceKeypoint.new(1, 1),
-	})
+	darkOverlay.BackgroundTransparency = val
 end
 
 if crosshair and crosshair:IsA("GuiObject") then
@@ -254,6 +326,7 @@ if darkness and darkness:IsA("GuiObject") then
 	if darkness:IsA("ImageButton") or darkness:IsA("ImageLabel") then
 		darkness.ImageTransparency = 1
 	end
+	darkness.Active = true
 	darkness.BackgroundTransparency = 0
 	darkness.BackgroundColor3 = Color3.new(1, 1, 1)
 	local oldG = darkness:FindFirstChildOfClass("UIGradient")
@@ -283,134 +356,353 @@ local grip = Instance.new("Frame")
 grip.AnchorPoint = Vector2.new(0.5, 0.5)
 grip.Position = UDim2.new(0.5, 0, 0.5, 0)
 grip.Size = UDim2.fromOffset(40, 4)
-grip.BackgroundColor3 = Color3.fromRGB(110, 110, 120)
-grip.BackgroundTransparency = 0.2
+grip.BackgroundColor3 = THEME.textDim
+grip.BackgroundTransparency = 0.3
 grip.BorderSizePixel = 0
 grip.ZIndex = 51
 grip.Parent = handle
 addCorner(grip, 2)
 
 handle.MouseEnter:Connect(function()
-	tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(56, 4), BackgroundTransparency = 0 }, "gripHover")
+	tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(56, 4), BackgroundColor3 = THEME.accent, BackgroundTransparency = 0 }, "gripHover")
 end)
 handle.MouseLeave:Connect(function()
 	if not draggingWindow then
-		tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundTransparency = 0.2 }, "gripHover")
+		tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundColor3 = THEME.textDim, BackgroundTransparency = 0.3 }, "gripHover")
 	end
 end)
 
 ---------------------------------------------------------------------
--- Panel Extras: Hex, Random, History (classic)
+-- Panel Extras (kanan): scroll
 ---------------------------------------------------------------------
-local extras = Instance.new("Frame")
+local extras = Instance.new("ScrollingFrame")
 extras.Name = "Extras"
-extras.BackgroundColor3 = Color3.fromRGB(235, 235, 240)
+extras.BackgroundColor3 = THEME.panel
 extras.BorderSizePixel = 0
-extras.Size = UDim2.new(1, 0, 0, 92)
-extras.Position = UDim2.new(0, 0, 1, 8)
+extras.Position = UDim2.new(1, 8, 0, 0)
+extras.Size = UDim2.new(0, EXTRA_W, 1, 0)
+extras.ScrollBarThickness = 4
+extras.ScrollBarImageColor3 = THEME.border2
+extras.CanvasSize = UDim2.new()
+extras.AutomaticCanvasSize = Enum.AutomaticSize.Y
+extras.ScrollingDirection = Enum.ScrollingDirection.Y
 extras.Parent = colorPalette
-addCorner(extras, 6)
-addStroke(extras, CLASSIC_DARK, 2, 0)
+addCorner(extras, 4)
+addStroke(extras, THEME.border, 2, 0)
 
-local hexBox = Instance.new("TextBox")
-hexBox.Name = "HexInput"
-hexBox.BackgroundColor3 = Color3.new(1, 1, 1)
-hexBox.BorderSizePixel = 0
-hexBox.Position = UDim2.new(0, 8, 0, 8)
-hexBox.Size = UDim2.new(1, -112, 0, 34)
-hexBox.Font = Enum.Font.SourceSansBold
-hexBox.TextSize = 20
-hexBox.TextColor3 = Color3.fromRGB(20, 20, 25)
-hexBox.PlaceholderText = "#RRGGBB"
-hexBox.PlaceholderColor3 = Color3.fromRGB(130, 130, 140)
-hexBox.ClearTextOnFocus = false
-hexBox.Text = "#A3A2A5"
-hexBox.Parent = extras
-addCorner(hexBox, 3)
-local hexStroke = addStroke(hexBox, CLASSIC_DARK, 1.5, 0)
+local pad = Instance.new("UIPadding")
+pad.PaddingTop = UDim.new(0, 8)
+pad.PaddingBottom = UDim.new(0, 8)
+pad.PaddingLeft = UDim.new(0, 8)
+pad.PaddingRight = UDim.new(0, 12)
+pad.Parent = extras
 
-local randomBtn = Instance.new("TextButton")
-randomBtn.Name = "RandomButton"
-randomBtn.AutoButtonColor = false
-randomBtn.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
-randomBtn.BorderSizePixel = 0
-randomBtn.AnchorPoint = Vector2.new(1, 0)
-randomBtn.Position = UDim2.new(1, -8, 0, 8)
-randomBtn.Size = UDim2.fromOffset(96, 34)
-randomBtn.Font = Enum.Font.SourceSansBold
-randomBtn.TextSize = 20
-randomBtn.TextColor3 = Color3.new(1, 1, 1)
-randomBtn.Text = "Random"
-randomBtn.Parent = extras
-addCorner(randomBtn, 3)
-addStroke(randomBtn, CLASSIC_DARK, 1.5, 0)
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 6)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = extras
 
-local historyRow = Instance.new("Frame")
-historyRow.Name = "History"
-historyRow.BackgroundTransparency = 1
-historyRow.Position = UDim2.new(0, 8, 0, 52)
-historyRow.Size = UDim2.new(1, -16, 0, 32)
-historyRow.Parent = extras
-local grid = Instance.new("UIGridLayout")
-grid.CellPadding = UDim2.fromOffset(4, 0)
-grid.CellSize = UDim2.new(1 / MAX_HISTORY, -4, 1, 0)
-grid.SortOrder = Enum.SortOrder.LayoutOrder
-grid.Parent = historyRow
-
-local swatches = {}
-for i = 1, MAX_HISTORY do
-	local sw = Instance.new("TextButton")
-	sw.Name = "Swatch" .. i
-	sw.Text = ""
-	sw.AutoButtonColor = false
-	sw.LayoutOrder = i
-	sw.BackgroundColor3 = Color3.fromRGB(210, 210, 215)
-	sw.BorderSizePixel = 0
-	sw.Parent = historyRow
-	addCorner(sw, 3)
-	local st = addStroke(sw, CLASSIC_DARK, 1.5, 0)
-	swatches[i] = sw
-	sw.MouseEnter:Connect(function()
-		tween(st, TWEEN_FAST, { Color = CLASSIC_LIGHT, Thickness = 2.5 }, sw)
-	end)
-	sw.MouseLeave:Connect(function()
-		tween(st, TWEEN_FAST, { Color = CLASSIC_DARK, Thickness = 1.5 }, sw)
-	end)
+local order = 0
+local function nextOrder()
+	order += 1
+	return order
 end
 
-local setColor -- forward declaration
+local function row(height)
+	local f = Instance.new("Frame")
+	f.BackgroundTransparency = 1
+	f.Size = UDim2.new(1, 0, 0, height)
+	f.LayoutOrder = nextOrder()
+	f.Parent = extras
+	return f
+end
 
-local function refreshHistory()
-	for i, sw in ipairs(swatches) do
-		sw.BackgroundColor3 = history[i] or Color3.fromRGB(210, 210, 215)
+local function section(text)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Size = UDim2.new(1, 0, 0, 14)
+	l.LayoutOrder = nextOrder()
+	l.Font = Enum.Font.SourceSansBold
+	l.TextSize = 13
+	l.TextColor3 = THEME.textDim
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.Text = string.upper(text)
+	l.Parent = extras
+	return l
+end
+
+local function makeButton(parent, text, layoutOrder)
+	local b = Instance.new("TextButton")
+	b.AutoButtonColor = false
+	b.BackgroundColor3 = THEME.btn
+	b.BorderSizePixel = 0
+	b.Font = Enum.Font.SourceSans
+	b.TextSize = 16
+	b.TextColor3 = THEME.text
+	b.Text = text
+	b.LayoutOrder = layoutOrder or 0
+	b.Parent = parent
+	addCorner(b, 3)
+	local st = addStroke(b, THEME.border, 1, 0)
+	b.MouseEnter:Connect(function()
+		tween(b, TWEEN_FAST, { BackgroundColor3 = THEME.btnHover }, b)
+		tween(st, TWEEN_FAST, { Color = THEME.accent }, st)
+	end)
+	b.MouseLeave:Connect(function()
+		tween(b, TWEEN_FAST, { BackgroundColor3 = THEME.btn }, b)
+		tween(st, TWEEN_FAST, { Color = THEME.border }, st)
+	end)
+	return b
+end
+
+local function makeBox(parent, text, placeholder)
+	local t = Instance.new("TextBox")
+	t.BackgroundColor3 = THEME.input
+	t.BorderSizePixel = 0
+	t.Font = Enum.Font.SourceSans
+	t.TextSize = 16
+	t.TextColor3 = THEME.text
+	t.PlaceholderColor3 = THEME.textDim
+	t.PlaceholderText = placeholder or ""
+	t.Text = text or ""
+	t.ClearTextOnFocus = false
+	t.Parent = parent
+	addCorner(t, 3)
+	local st = addStroke(t, THEME.border2, 1, 0)
+	t.Focused:Connect(function()
+		tween(st, TWEEN_FAST, { Color = THEME.accent }, st)
+	end)
+	t.FocusLost:Connect(function()
+		tween(st, TWEEN_FAST, { Color = THEME.border2 }, st)
+	end)
+	return t, st
+end
+
+local function gridRow(height, cols)
+	local f = row(height)
+	local g = Instance.new("UIGridLayout")
+	g.CellPadding = UDim2.fromOffset(4, 0)
+	g.CellSize = UDim2.new(1 / cols, -4, 1, 0)
+	g.SortOrder = Enum.SortOrder.LayoutOrder
+	g.Parent = f
+	return f
+end
+
+local function buttonRow(labels)
+	local f = gridRow(26, #labels)
+	local out = {}
+	for i, l in ipairs(labels) do
+		out[i] = makeButton(f, l, i)
+	end
+	return out
+end
+
+local function swatchRow(count, perRow, height)
+	local rows = math.ceil(count / perRow)
+	local f = row(rows * height + (rows - 1) * 4)
+	local g = Instance.new("UIGridLayout")
+	g.CellPadding = UDim2.fromOffset(4, 4)
+	g.CellSize = UDim2.new(1 / perRow, -4, 0, height)
+	g.SortOrder = Enum.SortOrder.LayoutOrder
+	g.Parent = f
+	local list = {}
+	for i = 1, count do
+		local s = Instance.new("TextButton")
+		s.Text = ""
+		s.AutoButtonColor = false
+		s.LayoutOrder = i
+		s.BackgroundColor3 = THEME.input
+		s.BorderSizePixel = 0
+		s.Parent = f
+		addCorner(s, 3)
+		local st = addStroke(s, THEME.border2, 1, 0)
+		s.MouseEnter:Connect(function()
+			tween(st, TWEEN_FAST, { Color = THEME.accent, Thickness = 2 }, st)
+		end)
+		s.MouseLeave:Connect(function()
+			tween(st, TWEEN_FAST, { Color = THEME.border2, Thickness = 1 }, st)
+		end)
+		list[i] = s
+	end
+	return list
+end
+
+local changeColor, setColor, updateColor, updateIndicators, refreshExtras
+
+-- HEX + Random
+section("Hex")
+local hexRow = row(28)
+local hexBox, hexStroke = makeBox(hexRow, "#A3A2A5", "#RRGGBB")
+hexBox.Font = Enum.Font.SourceSansBold
+hexBox.Size = UDim2.new(1, -76, 1, 0)
+local randomBtn = makeButton(hexRow, "Random", 0)
+randomBtn.AnchorPoint = Vector2.new(1, 0)
+randomBtn.Position = UDim2.new(1, 0, 0, 0)
+randomBtn.Size = UDim2.new(0, 70, 1, 0)
+randomBtn.BackgroundColor3 = THEME.accent
+randomBtn.TextColor3 = Color3.new(1, 1, 1)
+randomBtn.Font = Enum.Font.SourceSansBold
+
+-- RGB
+section("RGB")
+local rgbRow = gridRow(26, 3)
+local rBox = makeBox(rgbRow, "", "R"); rBox.LayoutOrder = 1
+local gBox = makeBox(rgbRow, "", "G"); gBox.LayoutOrder = 2
+local bBox = makeBox(rgbRow, "", "B"); bBox.LayoutOrder = 3
+for _, bx in ipairs({ rBox, gBox, bBox }) do bx.TextXAlignment = Enum.TextXAlignment.Center end
+
+-- HSV
+section("HSV")
+local hsvRow = gridRow(26, 3)
+local hBox = makeBox(hsvRow, "", "H°"); hBox.LayoutOrder = 1
+local sBox = makeBox(hsvRow, "", "S%"); sBox.LayoutOrder = 2
+local vBox = makeBox(hsvRow, "", "V%"); vBox.LayoutOrder = 3
+for _, bx in ipairs({ hBox, sBox, vBox }) do bx.TextXAlignment = Enum.TextXAlignment.Center end
+
+-- Kontras
+section("Contrast (WCAG)")
+local previewRow = row(34)
+local preview = Instance.new("Frame")
+preview.Size = UDim2.new(1, 0, 1, 0)
+preview.BackgroundColor3 = currentColor
+preview.BorderSizePixel = 0
+preview.Parent = previewRow
+addCorner(preview, 3)
+addStroke(preview, THEME.border2, 1, 0)
+
+local function previewLabel(text, x, w, color)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Position = UDim2.new(0, x, 0, 0)
+	l.Size = UDim2.new(0, w, 1, 0)
+	l.Font = Enum.Font.SourceSansBold
+	l.TextSize = 22
+	l.TextColor3 = color
+	l.Text = text
+	l.ZIndex = 22
+	l.Parent = preview
+	return l
+end
+previewLabel("Aa", 8, 30, Color3.new(1, 1, 1))
+previewLabel("Aa", 40, 30, Color3.new(0, 0, 0))
+local contrastInfo = previewLabel("", 76, 0, Color3.new(1, 1, 1))
+contrastInfo.Size = UDim2.new(1, -82, 1, 0)
+contrastInfo.TextSize = 13
+contrastInfo.TextXAlignment = Enum.TextXAlignment.Right
+
+local nearestRow = row(16)
+local nearestLabel = Instance.new("TextLabel")
+nearestLabel.BackgroundTransparency = 1
+nearestLabel.Size = UDim2.new(1, 0, 1, 0)
+nearestLabel.Font = Enum.Font.SourceSans
+nearestLabel.TextSize = 14
+nearestLabel.TextColor3 = THEME.textDim
+nearestLabel.TextXAlignment = Enum.TextXAlignment.Left
+nearestLabel.Text = ""
+nearestLabel.Parent = nearestRow
+
+-- Aksi cepat
+section("Quick actions")
+local ops1 = buttonRow({ "Invert", "Gray", "Lighter", "Darker" })
+local ops2 = buttonRow({ "Undo", "Redo", "Reset", "★ Save" })
+
+-- Harmony
+section("Harmony")
+local HARMONIES = {
+	{ name = "Complementary", offsets = { 180 } },
+	{ name = "Analogous", offsets = { -30, 30 } },
+	{ name = "Triadic", offsets = { 120, 240 } },
+	{ name = "Split Complementary", offsets = { 150, 210 } },
+	{ name = "Tetradic", offsets = { 90, 180, 270 } },
+}
+local harmonyIndex = 1
+local harmonyBtnRow = row(26)
+local harmonyBtn = makeButton(harmonyBtnRow, "", 0)
+harmonyBtn.Size = UDim2.new(1, 0, 1, 0)
+local harmonySw = swatchRow(5, 5, 26)
+local harmonyColors = {}
+
+-- Shades & Tints
+section("Shades")
+local shadeSw = swatchRow(7, 7, 22)
+local shadeColors = {}
+section("Tints")
+local tintSw = swatchRow(7, 7, 22)
+local tintColors = {}
+
+-- History & Favorites
+section("Recent")
+local historySw = swatchRow(MAX_HISTORY, 8, 22)
+local favHeader = section("Favorites  (klik kanan / tahan = hapus)")
+local favSw = swatchRow(MAX_FAV, 8, 22)
+local clearFavBtn = buttonRow({ "Clear favorites" })[1]
+
+-- ZIndex extras
+for _, d in ipairs(extras:GetDescendants()) do
+	if d:IsA("GuiObject") and d.ZIndex < 22 then
+		d.ZIndex = 21
 	end
 end
+extras.ZIndex = 20
 
-for i, sw in ipairs(swatches) do
-	sw.MouseButton1Click:Connect(function()
-		if history[i] then
-			setColor(history[i], true)
-		end
-	end)
+local function refreshList(sws, list)
+	for i, sw in ipairs(sws) do
+		sw.BackgroundColor3 = list[i] or THEME.input
+	end
 end
 
 local function pushHistory(color)
 	for i = #history, 1, -1 do
-		if same(history[i], color) then
-			table.remove(history, i)
-		end
+		if same(history[i], color) then table.remove(history, i) end
 	end
 	table.insert(history, 1, color)
-	while #history > MAX_HISTORY do
-		table.remove(history)
+	while #history > MAX_HISTORY do table.remove(history) end
+	refreshList(historySw, history)
+end
+
+local function addFavorite(color)
+	for _, f in ipairs(favorites) do
+		if same(f, color) then return end
 	end
-	refreshHistory()
+	if #favorites >= MAX_FAV then table.remove(favorites, 1) end
+	table.insert(favorites, color)
+	refreshList(favSw, favorites)
+end
+
+---------------------------------------------------------------------
+-- Undo / Redo
+---------------------------------------------------------------------
+local function snapshot(throttle)
+	local now = os.clock()
+	if throttle and now - lastSnap < 0.5 then
+		lastSnap = now
+		return
+	end
+	lastSnap = now
+	local top = undoStack[#undoStack]
+	if not top or not same(top, currentColor) then
+		table.insert(undoStack, currentColor)
+		if #undoStack > 50 then table.remove(undoStack, 1) end
+	end
+	redoStack = {}
+end
+
+local function undo()
+	if #undoStack == 0 then return end
+	table.insert(redoStack, currentColor)
+	setColor(table.remove(undoStack), true)
+end
+
+local function redo()
+	if #redoStack == 0 then return end
+	table.insert(undoStack, currentColor)
+	setColor(table.remove(redoStack), true)
 end
 
 ---------------------------------------------------------------------
 -- Update visual
 ---------------------------------------------------------------------
-local function updateIndicators(animated)
+updateIndicators = function(animated)
 	local info = animated and TWEEN_FAST or nil
 
 	if palette and palette:IsA("GuiObject") and crosshair then
@@ -444,15 +736,61 @@ local function updateIndicators(animated)
 	end
 end
 
-local function updateColor()
+refreshExtras = function()
+	local r, g, b = to255(currentColor)
+	if not rBox:IsFocused() then rBox.Text = tostring(r) end
+	if not gBox:IsFocused() then gBox.Text = tostring(g) end
+	if not bBox:IsFocused() then bBox.Text = tostring(b) end
+	if not hBox:IsFocused() then hBox.Text = tostring(math.round(hue * 360) % 360) end
+	if not sBox:IsFocused() then sBox.Text = tostring(math.round(sat * 100)) end
+	if not vBox:IsFocused() then vBox.Text = tostring(math.round(val * 100)) end
+	if not hexBox:IsFocused() then hexBox.Text = "#" .. currentColor:ToHex():upper() end
+	tween(hexStroke, TWEEN_MED, { Color = currentColor }, "hexStrokeColor")
+
+	-- kontras
+	preview.BackgroundColor3 = currentColor
+	local rw = contrast(currentColor, Color3.new(1, 1, 1))
+	local rb = contrast(currentColor, Color3.new(0, 0, 0))
+	local best = math.max(rw, rb)
+	local grade = best >= 7 and "AAA" or best >= 4.5 and "AA" or best >= 3 and "AA Large" or "Fail"
+	contrastInfo.TextColor3 = rw >= rb and Color3.new(1, 1, 1) or Color3.new(0, 0, 0)
+	contrastInfo.Text = string.format("W %.1f  B %.1f  %s", rw, rb, grade)
+
+	local name, exact = brickName(currentColor)
+	nearestLabel.Text = (exact and "BrickColor: " or "Nearest BrickColor: ") .. name
+
+	-- harmony
+	local mode = HARMONIES[harmonyIndex]
+	harmonyBtn.Text = "Mode: " .. mode.name .. "  ›"
+	for i, sw in ipairs(harmonySw) do
+		if i == 1 then
+			harmonyColors[i] = currentColor
+		elseif mode.offsets[i - 1] then
+			harmonyColors[i] = Color3.fromHSV((hue + mode.offsets[i - 1] / 360) % 1, sat, val)
+		else
+			harmonyColors[i] = nil
+		end
+		sw.Visible = harmonyColors[i] ~= nil
+		if harmonyColors[i] then sw.BackgroundColor3 = harmonyColors[i] end
+	end
+
+	-- shades & tints
+	for i = 1, 7 do
+		shadeColors[i] = Color3.fromHSV(hue, sat, 1 - (i - 1) / 6 * 0.9)
+		shadeSw[i].BackgroundColor3 = shadeColors[i]
+		tintColors[i] = Color3.fromHSV(hue, 1 - (i - 1) / 6, val)
+		tintSw[i].BackgroundColor3 = tintColors[i]
+	end
+end
+
+updateColor = function()
 	currentColor = Color3.fromHSV(hue, sat, val)
 	local r, g, b = to255(currentColor)
 
-	-- Palette tengah ikut gelap: val 1 = terang (transparan), val 0 = hitam
+	-- Palette tengah ikut gelap
 	if darkOverlay then
 		tween(darkOverlay, TWEEN_FAST, { BackgroundTransparency = val }, "darkOverlay")
 	end
-	-- Bar darkness mengikuti hue & sat
 	if darkGradient then
 		darkGradient.Color = ColorSequence.new(Color3.fromHSV(hue, sat, 1), Color3.new(0, 0, 0))
 	end
@@ -464,6 +802,9 @@ local function updateColor()
 				tween(selectedColorFrame, TWEEN_MED, { ImageColor3 = currentColor }, "selImg")
 			end
 		end
+		if selectedColorFrame:IsA("TextLabel") or selectedColorFrame:IsA("TextButton") then
+			selectedColorFrame.TextColor3 = luminance(currentColor) > 0.4 and Color3.new(0, 0, 0) or Color3.new(1, 1, 1)
+		end
 	end
 
 	if selectedColorText and (selectedColorText:IsA("TextLabel") or selectedColorText:IsA("TextButton")) then
@@ -471,13 +812,11 @@ local function updateColor()
 	end
 
 	if selectedBrickText and (selectedBrickText:IsA("TextLabel") or selectedBrickText:IsA("TextButton")) then
-		selectedBrickText.Text = brickName(currentColor)
+		local name, exact = brickName(currentColor)
+		selectedBrickText.Text = exact and name or "Custom"
 	end
 
-	if not hexBox:IsFocused() then
-		hexBox.Text = "#" .. currentColor:ToHex():upper()
-	end
-
+	refreshExtras()
 	colorPalette:SetAttribute("SelectedColor", currentColor)
 end
 
@@ -487,8 +826,13 @@ setColor = function(color, animated)
 	updateIndicators(animated)
 end
 
+changeColor = function(color, animated)
+	snapshot()
+	setColor(color, animated)
+end
+
 ---------------------------------------------------------------------
--- Palette (klik + drag)
+-- Palette (klik + drag + scroll)
 ---------------------------------------------------------------------
 local function pulseCrosshair()
 	if not crosshair or not crosshair:IsA("GuiObject") then return end
@@ -524,20 +868,24 @@ local function isPress(input)
 		or input.UserInputType == Enum.UserInputType.Touch
 end
 
-if palette and palette:IsA("GuiButton") then
+if palette and palette:IsA("GuiObject") then
 	palette.InputBegan:Connect(function(input)
 		if isPress(input) then
+			snapshot()
 			draggingPalette = true
 			pulseCrosshair()
 			handlePalette(input.Position)
 		end
 	end)
+	palette.MouseEnter:Connect(function() hoverWheel += 1 end)
+	palette.MouseLeave:Connect(function() hoverWheel = math.max(0, hoverWheel - 1) end)
 end
 
 local function bindDarkness(gui)
 	if gui and gui:IsA("GuiObject") then
 		gui.InputBegan:Connect(function(input)
 			if isPress(input) then
+				snapshot()
 				draggingDarkness = true
 				handleDarkness(input.Position)
 			end
@@ -547,6 +895,10 @@ end
 bindDarkness(darkness)
 if darknessAppearance ~= darkness then
 	bindDarkness(darknessAppearance)
+end
+if darkness and darkness:IsA("GuiObject") then
+	darkness.MouseEnter:Connect(function() hoverWheel += 1 end)
+	darkness.MouseLeave:Connect(function() hoverWheel = math.max(0, hoverWheel - 1) end)
 end
 
 handle.InputBegan:Connect(function(input)
@@ -558,7 +910,14 @@ handle.InputBegan:Connect(function(input)
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement
+	if input.UserInputType == Enum.UserInputType.MouseWheel then
+		if hoverWheel > 0 and colorPalette.Visible then
+			snapshot(true)
+			val = math.clamp(val + input.Position.Z * 0.03, 0, 1)
+			updateColor()
+			updateIndicators(true)
+		end
+	elseif input.UserInputType == Enum.UserInputType.MouseMovement
 		or input.UserInputType == Enum.UserInputType.Touch then
 		if draggingWindow and dragStart then
 			local d = input.Position - dragStart
@@ -577,7 +936,7 @@ end)
 UserInputService.InputEnded:Connect(function(input)
 	if isPress(input) then
 		if draggingWindow then
-			tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundTransparency = 0.2 }, "gripHover")
+			tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundColor3 = THEME.textDim, BackgroundTransparency = 0.3 }, "gripHover")
 		end
 		draggingPalette = false
 		draggingDarkness = false
@@ -593,18 +952,21 @@ local function bindBasicButton(btn)
 	local baseSize = btn.Size
 	local baseTransparency = btn.BackgroundTransparency
 
-	classicBox(btn)
+	studioBox(btn, THEME.border)
+	local st = btn:FindFirstChildOfClass("UIStroke")
 
 	btn.MouseEnter:Connect(function()
 		tween(btn, TWEEN_FAST, {
 			Size = UDim2.new(baseSize.X.Scale, baseSize.X.Offset + 4, baseSize.Y.Scale, baseSize.Y.Offset + 4),
 		}, btn)
+		if st then tween(st, TWEEN_FAST, { Color = THEME.accent }, st) end
 	end)
 	btn.MouseLeave:Connect(function()
 		tween(btn, TWEEN_FAST, { Size = baseSize }, btn)
+		if st then tween(st, TWEEN_FAST, { Color = THEME.border }, st) end
 	end)
 	btn.MouseButton1Click:Connect(function()
-		setColor(btn.BackgroundColor3, true)
+		changeColor(btn.BackgroundColor3, true)
 		pulseCrosshair()
 		btn.BackgroundTransparency = 0.5
 		tween(btn, TWEEN_MED, { BackgroundTransparency = baseTransparency }, btn.Name .. "_flash")
@@ -619,48 +981,153 @@ if basicColors then
 end
 
 ---------------------------------------------------------------------
--- Hex input + Random
+-- Input extras: hex / rgb / hsv / random
 ---------------------------------------------------------------------
-hexBox.Focused:Connect(function()
-	tween(hexStroke, TWEEN_FAST, { Thickness = 2.5, Color = Color3.fromRGB(0, 162, 255) }, "hexFocus")
-end)
-
-hexBox.FocusLost:Connect(function()
-	tween(hexStroke, TWEEN_FAST, { Thickness = 1.5, Color = CLASSIC_DARK }, "hexFocus")
-	local txt = hexBox.Text:gsub("[^%x]", "")
-	if #txt == 3 then
-		txt = txt:sub(1, 1):rep(2) .. txt:sub(2, 2):rep(2) .. txt:sub(3, 3):rep(2)
-	end
-	if #txt == 6 then
-		local ok, c = pcall(Color3.fromHex, "#" .. txt)
-		if ok and c then
-			setColor(c, true)
-			pulseCrosshair()
-			return
-		end
-	end
-	local base = hexBox.Position
+local function shake(gui)
+	local base = gui.Position
 	for _, off in ipairs({ 6, -6, 4, -4, 0 }) do
-		hexBox.Position = UDim2.new(base.X.Scale, base.X.Offset + off, base.Y.Scale, base.Y.Offset)
+		gui.Position = UDim2.new(base.X.Scale, base.X.Offset + off, base.Y.Scale, base.Y.Offset)
 		task.wait(0.03)
 	end
-	hexBox.Text = "#" .. currentColor:ToHex():upper()
+end
+
+hexBox.FocusLost:Connect(function()
+	local c = parseHex(hexBox.Text)
+	if c then
+		changeColor(c, true)
+		pulseCrosshair()
+	else
+		task.spawn(shake, hexBox)
+		refreshExtras()
+	end
 end)
 
+local function commitRGB()
+	local r, g, b = tonumber(rBox.Text), tonumber(gBox.Text), tonumber(bBox.Text)
+	if r and g and b then
+		changeColor(Color3.fromRGB(math.clamp(r, 0, 255), math.clamp(g, 0, 255), math.clamp(b, 0, 255)), true)
+		pulseCrosshair()
+	else
+		refreshExtras()
+	end
+end
+for _, bx in ipairs({ rBox, gBox, bBox }) do bx.FocusLost:Connect(commitRGB) end
+
+local function commitHSV()
+	local h, s, v = tonumber(hBox.Text), tonumber(sBox.Text), tonumber(vBox.Text)
+	if h and s and v then
+		snapshot()
+		hue = (h % 360) / 360
+		sat = math.clamp(s, 0, 100) / 100
+		val = math.clamp(v, 0, 100) / 100
+		updateColor()
+		updateIndicators(true)
+		pulseCrosshair()
+	else
+		refreshExtras()
+	end
+end
+for _, bx in ipairs({ hBox, sBox, vBox }) do bx.FocusLost:Connect(commitHSV) end
+
 local function randomColor()
+	snapshot()
 	hue, sat, val = math.random(), 0.4 + math.random() * 0.6, 0.5 + math.random() * 0.5
 	updateColor()
 	updateIndicators(true)
 	pulseCrosshair()
 end
-
-randomBtn.MouseEnter:Connect(function()
-	tween(randomBtn, TWEEN_FAST, { BackgroundColor3 = Color3.fromRGB(60, 190, 255) }, "rndHover")
-end)
-randomBtn.MouseLeave:Connect(function()
-	tween(randomBtn, TWEEN_FAST, { BackgroundColor3 = Color3.fromRGB(0, 162, 255) }, "rndHover")
-end)
 randomBtn.MouseButton1Click:Connect(randomColor)
+
+---------------------------------------------------------------------
+-- Quick actions, harmony, swatches
+---------------------------------------------------------------------
+ops1[1].MouseButton1Click:Connect(function()
+	changeColor(Color3.new(1 - currentColor.R, 1 - currentColor.G, 1 - currentColor.B), true)
+end)
+ops1[2].MouseButton1Click:Connect(function()
+	local l = currentColor.R * 0.299 + currentColor.G * 0.587 + currentColor.B * 0.114
+	changeColor(Color3.new(l, l, l), true)
+end)
+ops1[3].MouseButton1Click:Connect(function()
+	snapshot()
+	val = math.clamp(val + 0.1, 0, 1)
+	updateColor(); updateIndicators(true)
+end)
+ops1[4].MouseButton1Click:Connect(function()
+	snapshot()
+	val = math.clamp(val - 0.1, 0, 1)
+	updateColor(); updateIndicators(true)
+end)
+
+ops2[1].MouseButton1Click:Connect(undo)
+ops2[2].MouseButton1Click:Connect(redo)
+ops2[3].MouseButton1Click:Connect(function()
+	changeColor(openColor, true)
+end)
+ops2[4].MouseButton1Click:Connect(function()
+	addFavorite(currentColor)
+end)
+
+harmonyBtn.MouseButton1Click:Connect(function()
+	harmonyIndex = harmonyIndex % #HARMONIES + 1
+	refreshExtras()
+end)
+
+for i, sw in ipairs(harmonySw) do
+	sw.MouseButton1Click:Connect(function()
+		if harmonyColors[i] and i > 1 then changeColor(harmonyColors[i], true) end
+	end)
+end
+for i, sw in ipairs(shadeSw) do
+	sw.MouseButton1Click:Connect(function()
+		if shadeColors[i] then changeColor(shadeColors[i], true) end
+	end)
+end
+for i, sw in ipairs(tintSw) do
+	sw.MouseButton1Click:Connect(function()
+		if tintColors[i] then changeColor(tintColors[i], true) end
+	end)
+end
+for i, sw in ipairs(historySw) do
+	sw.MouseButton1Click:Connect(function()
+		if history[i] then changeColor(history[i], true) end
+	end)
+end
+for i, sw in ipairs(favSw) do
+	sw.MouseButton1Click:Connect(function()
+		if favorites[i] then changeColor(favorites[i], true) end
+	end)
+	local function remove()
+		if favorites[i] then
+			table.remove(favorites, i)
+			refreshList(favSw, favorites)
+		end
+	end
+	sw.MouseButton2Click:Connect(remove)
+	-- tahan 0.6 detik = hapus (mobile)
+	sw.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			local held = true
+			local conn
+			conn = input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					held = false
+					conn:Disconnect()
+				end
+			end)
+			task.delay(0.6, function()
+				if held then
+					if conn then conn:Disconnect() end
+					remove()
+				end
+			end)
+		end
+	end)
+end
+clearFavBtn.MouseButton1Click:Connect(function()
+	favorites = {}
+	refreshList(favSw, favorites)
+end)
 
 ---------------------------------------------------------------------
 -- Close + Confirm + Cancel
@@ -681,9 +1148,11 @@ end
 local baseTextSize = (okButton and okButton:IsA("TextButton")) and okButton.TextSize or nil
 
 local function confirm()
+	if closing then return end
 	local r, g, b = to255(currentColor)
+	local name = brickName(currentColor)
 	print(string.format("[ColorPalette] Warna dipilih: %d, %d, %d (%s) #%s",
-		r, g, b, brickName(currentColor), currentColor:ToHex():upper()))
+		r, g, b, name, currentColor:ToHex():upper()))
 	colorPalette:SetAttribute("SelectedColor", currentColor)
 	colorPalette:SetAttribute("SelectedHex", "#" .. currentColor:ToHex():upper())
 	colorPalette:SetAttribute("Confirmed", (colorPalette:GetAttribute("Confirmed") or 0) + 1)
@@ -695,63 +1164,86 @@ local function confirm()
 	task.spawn(closePicker)
 end
 
-local function cancel()
+local function cancel(byOutside)
+	if closing then return end
 	setColor(openColor, false)
+	colorPalette:SetAttribute("Cancelled", (colorPalette:GetAttribute("Cancelled") or 0) + 1)
+	if byOutside then closedOutsideAt = os.clock() end
 	task.spawn(closePicker)
 end
 
 if okButton and okButton:IsA("GuiButton") then
-	okButton.MouseEnter:Connect(function()
-		tween(okButton, TWEEN_FAST, { BackgroundTransparency = 0.15 }, "okHover")
-	end)
-	okButton.MouseLeave:Connect(function()
-		tween(okButton, TWEEN_FAST, { BackgroundTransparency = 0 }, "okHover")
-	end)
 	okButton.MouseButton1Click:Connect(confirm)
 end
-
 if cancelButton and cancelButton:IsA("GuiButton") then
-	cancelButton.MouseEnter:Connect(function()
-		tween(cancelButton, TWEEN_FAST, { BackgroundTransparency = 0.15 }, "cancelHover")
-	end)
-	cancelButton.MouseLeave:Connect(function()
-		tween(cancelButton, TWEEN_FAST, { BackgroundTransparency = 0 }, "cancelHover")
-	end)
-	cancelButton.MouseButton1Click:Connect(cancel)
+	cancelButton.MouseButton1Click:Connect(function() cancel(false) end)
 end
+
+---------------------------------------------------------------------
+-- Klik di luar frame = tutup
+---------------------------------------------------------------------
+local function insideGui(gui, pos)
+	local p, s = gui.AbsolutePosition, gui.AbsoluteSize
+	return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
+end
+
+UserInputService.InputBegan:Connect(function(input)
+	if not isPress(input) then return end
+	if not colorPalette.Visible or closing then return end
+	if os.clock() - openedAt < 0.25 then return end
+	local pos = input.Position
+	if insideGui(colorPalette, pos) or insideGui(extras, pos) then return end
+	cancel(true)
+end)
 
 ---------------------------------------------------------------------
 -- Shortcut keyboard
--- Enter = OK | Esc = batal | R = random
--- Panah = hue/saturasi | PageUp/PageDown = terang/gelap | Shift = cepat
+-- Enter OK | Esc batal | R random | F favorit | I invert
+-- Ctrl+Z undo | Ctrl+Y / Ctrl+Shift+Z redo
+-- Panah hue/sat | PageUp/PageDown terang/gelap | Shift = cepat
 ---------------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe or not colorPalette.Visible or closing then return end
-	local step = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 0.05 or 0.01
+	local ctrl = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+	local shift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+	local step = shift and 0.05 or 0.01
 	local k = input.KeyCode
+
+	if ctrl and k == Enum.KeyCode.Z then
+		if shift then redo() else undo() end
+		return
+	elseif ctrl and k == Enum.KeyCode.Y then
+		redo()
+		return
+	end
+
 	if k == Enum.KeyCode.Return or k == Enum.KeyCode.KeypadEnter then
 		confirm()
 	elseif k == Enum.KeyCode.Escape then
-		cancel()
+		cancel(false)
 	elseif k == Enum.KeyCode.R then
 		randomColor()
+	elseif k == Enum.KeyCode.F then
+		addFavorite(currentColor)
+	elseif k == Enum.KeyCode.I then
+		changeColor(Color3.new(1 - currentColor.R, 1 - currentColor.G, 1 - currentColor.B), true)
 	elseif k == Enum.KeyCode.Left then
-		hue = (hue - step) % 1
+		snapshot(true); hue = (hue - step) % 1
 		updateColor(); updateIndicators(true)
 	elseif k == Enum.KeyCode.Right then
-		hue = (hue + step) % 1
+		snapshot(true); hue = (hue + step) % 1
 		updateColor(); updateIndicators(true)
 	elseif k == Enum.KeyCode.Up then
-		sat = math.clamp(sat + step, 0, 1)
+		snapshot(true); sat = math.clamp(sat + step, 0, 1)
 		updateColor(); updateIndicators(true)
 	elseif k == Enum.KeyCode.Down then
-		sat = math.clamp(sat - step, 0, 1)
+		snapshot(true); sat = math.clamp(sat - step, 0, 1)
 		updateColor(); updateIndicators(true)
 	elseif k == Enum.KeyCode.PageUp then
-		val = math.clamp(val + step, 0, 1)
+		snapshot(true); val = math.clamp(val + step, 0, 1)
 		updateColor(); updateIndicators(true)
 	elseif k == Enum.KeyCode.PageDown then
-		val = math.clamp(val - step, 0, 1)
+		snapshot(true); val = math.clamp(val - step, 0, 1)
 		updateColor(); updateIndicators(true)
 	end
 end)
@@ -760,11 +1252,24 @@ end)
 -- Animasi saat dibuka & update layout
 ---------------------------------------------------------------------
 colorPalette:GetPropertyChangedSignal("Visible"):Connect(function()
-	if colorPalette.Visible and not closing then
+	if not colorPalette.Visible then return end
+
+	-- cegah toggle membuka ulang tepat setelah klik luar
+	if closedOutsideAt and os.clock() - closedOutsideAt < 0.35 then
+		colorPalette.Visible = false
+		return
+	end
+
+	if not closing then
+		openedAt = os.clock()
 		openColor = currentColor
+		undoStack, redoStack = {}, {}
 		colorPalette.Size = UDim2.new(originalSize.X.Scale * 0.85, originalSize.X.Offset * 0.85,
 			originalSize.Y.Scale * 0.85, originalSize.Y.Offset * 0.85)
-		tween(colorPalette, TWEEN_POP, { Size = originalSize }, "openTween")
+		local t = tween(colorPalette, TWEEN_POP, { Size = originalSize }, "openTween")
+		if t then
+			t.Completed:Connect(function() updateIndicators(false) end)
+		end
 		task.defer(function()
 			updateIndicators(false)
 		end)
@@ -780,6 +1285,14 @@ if palette and palette:IsA("GuiObject") then
 	end)
 end
 
+-- Kontrol dari script lain: set attribute "SelectedColor" (Color3)
+colorPalette:GetAttributeChangedSignal("SelectedColor"):Connect(function()
+	local c = colorPalette:GetAttribute("SelectedColor")
+	if typeof(c) == "Color3" and not same(c, currentColor) then
+		setColor(c, false)
+	end
+end)
+
 ---------------------------------------------------------------------
 -- Inisialisasi
 ---------------------------------------------------------------------
@@ -794,4 +1307,5 @@ if typeof(startColor) ~= "Color3" then
 end
 setColor(startColor, false)
 openColor = currentColor
-refreshHistory()
+refreshList(historySw, history)
+refreshList(favSw, favorites)
