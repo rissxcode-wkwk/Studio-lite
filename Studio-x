@@ -1,4 +1,4 @@
--- LocalScript: ColorPalette controller v5 (Roblox Studio theme, tanpa script.Parent, toggle tidak diubah)
+-- LocalScript: ColorPalette controller v6 (Roblox Studio theme, tanpa script.Parent, toggle tidak diubah)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -35,7 +35,6 @@ local function find(name)
 	return colorPalette:FindFirstChild(name, true)
 end
 
--- bersihkan sisa runtime kalau script jalan ulang
 for _, n in ipairs({ "Extras", "DragHandle" }) do
 	local o = colorPalette:FindFirstChild(n)
 	if o then o:Destroy() end
@@ -210,7 +209,6 @@ if clickBlocker and clickBlocker:IsA("GuiObject") then
 	clickBlocker.Active = true
 end
 
--- label teks jadi tema Studio
 for _, d in ipairs(colorPalette:GetDescendants()) do
 	if d:IsA("TextLabel") and d ~= selectedColorFrame
 		and not (basicColors and d:IsDescendantOf(basicColors)) then
@@ -230,7 +228,6 @@ local function studioBox(gui, strokeColor)
 end
 
 studioBox(palette, THEME.border2)
-studioBox(darkness, THEME.border2)
 studioBox(selectedColorFrame, THEME.border2)
 
 local function styleActionButton(btn, baseColor, hoverColor, textColor)
@@ -256,9 +253,10 @@ styleActionButton(cancelButton, THEME.btn, THEME.btnHover, THEME.text)
 
 ---------------------------------------------------------------------
 -- Palette gradient AKURAT
--- X = hue, Y = saturasi (atas penuh, bawah putih), overlay hitam = Darkness
+-- X = hue, Y = saturasi. Kegelapan lewat BackgroundColor3 (abu val)
+-- yang dikali dengan UIGradient => hue*val dan putih*val = HSV asli
 ---------------------------------------------------------------------
-local darkOverlay, darkGradient
+local hueLayer, satLayer
 local paletteZ = 1
 
 if palette and palette:IsA("GuiObject") then
@@ -284,14 +282,14 @@ if palette and palette:IsA("GuiObject") then
 		f.Active = false
 		f.ZIndex = paletteZ + z
 		f.BackgroundTransparency = 0
-		f.BackgroundColor3 = Color3.new(1, 1, 1)
+		f.BackgroundColor3 = Color3.new(val, val, val)
 		f.Parent = palette
 		addCorner(f, 3)
 		return f
 	end
 
 	-- 1) Pelangi horizontal
-	local base = layer("HueLayer", 1)
+	hueLayer = layer("HueLayer", 1)
 	local hg = Instance.new("UIGradient")
 	local keys = {}
 	for i = 0, 6 do
@@ -299,10 +297,10 @@ if palette and palette:IsA("GuiObject") then
 	end
 	hg.Color = ColorSequence.new(keys)
 	hg.Rotation = 0
-	hg.Parent = base
+	hg.Parent = hueLayer
 
 	-- 2) Putih: atas transparan (sat 1) -> bawah pekat (sat 0)
-	local satLayer = layer("SatLayer", 2)
+	satLayer = layer("SatLayer", 2)
 	local sg = Instance.new("UIGradient")
 	sg.Rotation = 90
 	sg.Transparency = NumberSequence.new({
@@ -310,35 +308,79 @@ if palette and palette:IsA("GuiObject") then
 		NumberSequenceKeypoint.new(1, 0),
 	})
 	sg.Parent = satLayer
-
-	-- 3) Hitam: transparansi = val (val 1 = terang, val 0 = gelap total)
-	darkOverlay = layer("DarkLayer", 3)
-	darkOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
-	darkOverlay.BackgroundTransparency = val
 end
 
 if crosshair and crosshair:IsA("GuiObject") then
 	crosshair.ZIndex = paletteZ + 10
 end
 
--- Bar Darkness: atas = warna terang, bawah = hitam
-if darkness and darkness:IsA("GuiObject") then
-	if darkness:IsA("ImageButton") or darkness:IsA("ImageLabel") then
-		darkness.ImageTransparency = 1
+---------------------------------------------------------------------
+-- Bar Darkness: SATU bar saja (visual asli disembunyikan)
+---------------------------------------------------------------------
+local darkGradient, darkArrow
+
+local function hideVisual(root)
+	if not root then return end
+	local list = root:GetDescendants()
+	table.insert(list, root)
+	for _, d in ipairs(list) do
+		if d:IsA("UIStroke") or d:IsA("UIGradient") then
+			d:Destroy()
+		elseif d:IsA("GuiObject") then
+			d.BackgroundTransparency = 1
+			if d:IsA("ImageLabel") or d:IsA("ImageButton") then
+				d.ImageTransparency = 1
+			end
+			if d:IsA("TextLabel") or d:IsA("TextButton") then
+				d.TextTransparency = 1
+			end
+		end
 	end
+end
+
+if darkness and darkness:IsA("GuiObject") then
+	for _, n in ipairs({ "DarkBar", "DarkArrow" }) do
+		local old = darkness:FindFirstChild(n)
+		if old then old:Destroy() end
+	end
+
+	hideVisual(darkness)
+	hideVisual(darknessAppearance)
 	darkness.Active = true
-	darkness.BackgroundTransparency = 0
-	darkness.BackgroundColor3 = Color3.new(1, 1, 1)
-	local oldG = darkness:FindFirstChildOfClass("UIGradient")
-	if oldG then oldG:Destroy() end
+	darkness.ClipsDescendants = false
+	if darknessAppearance and darknessAppearance:IsA("GuiObject") then
+		darknessAppearance.Visible = true
+		darknessAppearance.Active = false
+	end
+
+	local bar = Instance.new("Frame")
+	bar.Name = "DarkBar"
+	bar.Size = UDim2.fromScale(1, 1)
+	bar.BackgroundColor3 = Color3.new(1, 1, 1)
+	bar.BorderSizePixel = 0
+	bar.Active = false
+	bar.ZIndex = darkness.ZIndex + 1
+	bar.Parent = darkness
+	addCorner(bar, 3)
+	addStroke(bar, THEME.border2, 1.5, 0)
+
 	darkGradient = Instance.new("UIGradient")
 	darkGradient.Rotation = 90
 	darkGradient.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(0, 0, 0))
-	darkGradient.Parent = darkness
-end
+	darkGradient.Parent = bar
 
-if darknessAppearance and darknessAppearance:IsA("GuiObject") and darkness then
-	darknessAppearance.ZIndex = math.max(darknessAppearance.ZIndex, darkness.ZIndex + 5)
+	darkArrow = Instance.new("TextLabel")
+	darkArrow.Name = "DarkArrow"
+	darkArrow.AnchorPoint = Vector2.new(0, 0.5)
+	darkArrow.Position = UDim2.new(1, 3, 1 - val, 0)
+	darkArrow.Size = UDim2.fromOffset(14, 16)
+	darkArrow.BackgroundTransparency = 1
+	darkArrow.Font = Enum.Font.SourceSansBold
+	darkArrow.TextSize = 18
+	darkArrow.TextColor3 = THEME.accent
+	darkArrow.Text = "◀"
+	darkArrow.ZIndex = darkness.ZIndex + 5
+	darkArrow.Parent = darkness
 end
 
 ---------------------------------------------------------------------
@@ -633,11 +675,10 @@ local tintColors = {}
 -- History & Favorites
 section("Recent")
 local historySw = swatchRow(MAX_HISTORY, 8, 22)
-local favHeader = section("Favorites  (klik kanan / tahan = hapus)")
+section("Favorites  (klik kanan / tahan = hapus)")
 local favSw = swatchRow(MAX_FAV, 8, 22)
 local clearFavBtn = buttonRow({ "Clear favorites" })[1]
 
--- ZIndex extras
 for _, d in ipairs(extras:GetDescendants()) do
 	if d:IsA("GuiObject") and d.ZIndex < 22 then
 		d.ZIndex = 21
@@ -712,26 +753,12 @@ updateIndicators = function(animated)
 		setInParent(crosshair, ax, ay, info, "crosshairPos")
 	end
 
-	if darkness and darkness:IsA("GuiObject") and darknessAppearance
-		and darknessAppearance:IsA("GuiObject")
-		and darknessAppearance.AbsoluteSize.Y < darkness.AbsoluteSize.Y * 0.5 then
-		local ay = darkness.AbsolutePosition.Y + (1 - val) * darkness.AbsoluteSize.Y
-		local parent = darknessAppearance.Parent
-		local py = 0
-		if parent and parent:IsA("GuiObject") then
-			py = parent.AbsolutePosition.Y
-		end
-		darknessAppearance.AnchorPoint = Vector2.new(darknessAppearance.AnchorPoint.X, 0.5)
-		local target = UDim2.new(
-			darknessAppearance.Position.X.Scale,
-			darknessAppearance.Position.X.Offset,
-			0,
-			ay - py
-		)
+	if darkArrow then
+		local target = UDim2.new(1, 3, 1 - val, 0)
 		if info then
-			tween(darknessAppearance, info, { Position = target }, "darkPos")
+			tween(darkArrow, info, { Position = target }, "darkPos")
 		else
-			darknessAppearance.Position = target
+			darkArrow.Position = target
 		end
 	end
 end
@@ -747,7 +774,6 @@ refreshExtras = function()
 	if not hexBox:IsFocused() then hexBox.Text = "#" .. currentColor:ToHex():upper() end
 	tween(hexStroke, TWEEN_MED, { Color = currentColor }, "hexStrokeColor")
 
-	-- kontras
 	preview.BackgroundColor3 = currentColor
 	local rw = contrast(currentColor, Color3.new(1, 1, 1))
 	local rb = contrast(currentColor, Color3.new(0, 0, 0))
@@ -759,7 +785,6 @@ refreshExtras = function()
 	local name, exact = brickName(currentColor)
 	nearestLabel.Text = (exact and "BrickColor: " or "Nearest BrickColor: ") .. name
 
-	-- harmony
 	local mode = HARMONIES[harmonyIndex]
 	harmonyBtn.Text = "Mode: " .. mode.name .. "  ›"
 	for i, sw in ipairs(harmonySw) do
@@ -774,7 +799,6 @@ refreshExtras = function()
 		if harmonyColors[i] then sw.BackgroundColor3 = harmonyColors[i] end
 	end
 
-	-- shades & tints
 	for i = 1, 7 do
 		shadeColors[i] = Color3.fromHSV(hue, sat, 1 - (i - 1) / 6 * 0.9)
 		shadeSw[i].BackgroundColor3 = shadeColors[i]
@@ -787,10 +811,12 @@ updateColor = function()
 	currentColor = Color3.fromHSV(hue, sat, val)
 	local r, g, b = to255(currentColor)
 
-	-- Palette tengah ikut gelap
-	if darkOverlay then
-		tween(darkOverlay, TWEEN_FAST, { BackgroundTransparency = val }, "darkOverlay")
-	end
+	-- Palette tengah ikut gelap (langsung, tanpa tween supaya selalu sinkron)
+	local shade = Color3.new(val, val, val)
+	if hueLayer then hueLayer.BackgroundColor3 = shade end
+	if satLayer then satLayer.BackgroundColor3 = shade end
+
+	-- Bar darkness mengikuti hue & sat
 	if darkGradient then
 		darkGradient.Color = ColorSequence.new(Color3.fromHSV(hue, sat, 1), Color3.new(0, 0, 0))
 	end
@@ -881,22 +907,14 @@ if palette and palette:IsA("GuiObject") then
 	palette.MouseLeave:Connect(function() hoverWheel = math.max(0, hoverWheel - 1) end)
 end
 
-local function bindDarkness(gui)
-	if gui and gui:IsA("GuiObject") then
-		gui.InputBegan:Connect(function(input)
-			if isPress(input) then
-				snapshot()
-				draggingDarkness = true
-				handleDarkness(input.Position)
-			end
-		end)
-	end
-end
-bindDarkness(darkness)
-if darknessAppearance ~= darkness then
-	bindDarkness(darknessAppearance)
-end
 if darkness and darkness:IsA("GuiObject") then
+	darkness.InputBegan:Connect(function(input)
+		if isPress(input) then
+			snapshot()
+			draggingDarkness = true
+			handleDarkness(input.Position)
+		end
+	end)
 	darkness.MouseEnter:Connect(function() hoverWheel += 1 end)
 	darkness.MouseLeave:Connect(function() hoverWheel = math.max(0, hoverWheel - 1) end)
 end
@@ -1104,7 +1122,6 @@ for i, sw in ipairs(favSw) do
 		end
 	end
 	sw.MouseButton2Click:Connect(remove)
-	-- tahan 0.6 detik = hapus (mobile)
 	sw.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch then
 			local held = true
@@ -1254,7 +1271,6 @@ end)
 colorPalette:GetPropertyChangedSignal("Visible"):Connect(function()
 	if not colorPalette.Visible then return end
 
-	-- cegah toggle membuka ulang tepat setelah klik luar
 	if closedOutsideAt and os.clock() - closedOutsideAt < 0.35 then
 		colorPalette.Visible = false
 		return
@@ -1285,7 +1301,6 @@ if palette and palette:IsA("GuiObject") then
 	end)
 end
 
--- Kontrol dari script lain: set attribute "SelectedColor" (Color3)
 colorPalette:GetAttributeChangedSignal("SelectedColor"):Connect(function()
 	local c = colorPalette:GetAttribute("SelectedColor")
 	if typeof(c) == "Color3" and not same(c, currentColor) then
