@@ -1,9 +1,11 @@
--- MainBar Remake + ColorPalette Remake (versi anti error nil)
+-- MainBar Plus + ColorPalette Remake
+-- Fitur langsung di tombol MainBar (Rig, Reset, Fly, Noclip, Speed, Jump, Terang)
+-- Catatan: Roblox tidak bisa render SVG, jadi ikon memakai glyph/emoji
 
 -- ========================================================================
--- BAGIAN 1: MAINBAR / STUDIO PLUS
+-- BAGIAN 1: MAINBAR PLUS (dijalankan di thread terpisah)
 -- ========================================================================
-do
+task.spawn(function()
     -- ========== LAYANAN ==========
     local Players = game:GetService("Players")
     local TweenService = game:GetService("TweenService")
@@ -11,32 +13,17 @@ do
     local RunService = game:GetService("RunService")
     local Lighting = game:GetService("Lighting")
     local Workspace = game:GetService("Workspace")
-    local StarterGui = game:GetService("StarterGui")
 
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
-
-    -- tunggu kamera siap (cegah nil)
-    local kamera = Workspace.CurrentCamera
-    do
-        local t0 = os.clock()
-        while not kamera and os.clock() - t0 < 10 do
-            task.wait(0.1)
-            kamera = Workspace.CurrentCamera
-        end
-    end
-    if not kamera then
-        warn("[StudioPlus] Kamera tidak ditemukan.")
-        return
-    end
 
     -- ========== BERSIHKAN VERSI LAMA ==========
     local genv = (getgenv and getgenv()) or _G
     if genv.StudioPlusBersih then
         pcall(genv.StudioPlusBersih)
     end
-    local lama = playerGui:FindFirstChild("StudioPlusUI")
-    if lama then lama:Destroy() end
+    local uiLama = playerGui:FindFirstChild("StudioPlusUI")
+    if uiLama then uiLama:Destroy() end
 
     local koneksi = {}
     local function sambung(sinyal, fn)
@@ -46,44 +33,23 @@ do
         return c
     end
 
-    -- ========== TEMA ROBLOX STUDIO (DARK) ==========
+    -- ========== TEMA (GAYA ROBLOX STUDIO) ==========
     local T = {
         bg = Color3.fromRGB(37, 37, 37),
         panel = Color3.fromRGB(46, 46, 46),
         panel2 = Color3.fromRGB(56, 56, 56),
         hover = Color3.fromRGB(70, 70, 70),
         border = Color3.fromRGB(26, 26, 26),
-        titlebar = Color3.fromRGB(53, 53, 53),
         text = Color3.fromRGB(204, 204, 204),
         muted = Color3.fromRGB(136, 136, 136),
-        off = Color3.fromRGB(80, 80, 80),
-        danger = Color3.fromRGB(196, 64, 64),
+        aksen = Color3.fromRGB(11, 153, 255),
+        pending = Color3.fromRGB(255, 160, 40),
     }
 
-    local palet = {
-        {Color3.fromRGB(11, 153, 255), Color3.fromRGB(11, 153, 255)},
-        {Color3.fromRGB(0, 190, 120), Color3.fromRGB(0, 190, 120)},
-        {Color3.fromRGB(255, 160, 40), Color3.fromRGB(255, 160, 40)},
-        {Color3.fromRGB(190, 110, 255), Color3.fromRGB(190, 110, 255)},
-        {Color3.fromRGB(235, 80, 100), Color3.fromRGB(235, 80, 100)},
-    }
-    local idxPalet = 1
-    local aksenObj = {}
-
-    local function terapkanAksen()
-        for _, d in ipairs(aksenObj) do
-            if d[1] and d[1].Parent then
-                pcall(function()
-                    TweenService:Create(d[1], TweenInfo.new(0.2), {[d[2]] = palet[idxPalet][1]}):Play()
-                end)
-            end
-        end
-    end
-
-    -- ========== HELPER UI ==========
     local FONT = Enum.Font.SourceSans
     local FONT_B = Enum.Font.SourceSansSemibold
 
+    -- ========== HELPER ==========
     local function buat(kelas, props, induk)
         local o = Instance.new(kelas)
         for k, v in pairs(props or {}) do
@@ -93,142 +59,79 @@ do
         return o
     end
 
-    local function sudut(obj, r)
-        return buat("UICorner", {CornerRadius = UDim.new(0, r or 4)}, obj)
-    end
-
-    local function garis(obj, tebal, warna, transp)
+    local function garis(obj, tebal, warna)
         local s = obj:FindFirstChildOfClass("UIStroke")
         if not s then
             s = Instance.new("UIStroke")
             s.Parent = obj
         end
-        s.Thickness = tebal or 1
-        s.Color = warna or T.border
-        s.Transparency = transp or 0
+        s.Thickness = tebal
+        s.Color = warna
         s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
         return s
     end
 
+    local function sudut(obj, r)
+        local c = obj:FindFirstChildOfClass("UICorner")
+        if not c then
+            c = Instance.new("UICorner")
+            c.Parent = obj
+        end
+        c.CornerRadius = UDim.new(0, r)
+        return c
+    end
+
     local function tween(obj, props, waktu)
-        if not obj or not obj.Parent then return nil end
-        local ok, t = pcall(function()
-            return TweenService:Create(obj, TweenInfo.new(waktu or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props)
+        if not obj or not obj.Parent then return end
+        pcall(function()
+            TweenService:Create(obj, TweenInfo.new(waktu or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
         end)
-        if ok and t then
-            t:Play()
-            return t
+    end
+
+    -- ========== CARI MAINBAR (TUNGGU SAMPAI ADA) ==========
+    local function cariMainBar()
+        local g = playerGui:FindFirstChild("StudioGui")
+        local m = g and g:FindFirstChild("MainBar")
+        if m then return m end
+        for _, d in ipairs(playerGui:GetDescendants()) do
+            if d.Name == "MainBar" and d:IsA("GuiObject") then
+                return d
+            end
         end
         return nil
     end
 
-    -- ========== TEMUKAN STUDIOGUI & MAINBAR ==========
-    local guiAsli = playerGui:FindFirstChild("StudioGui") or StarterGui:FindFirstChild("StudioGui")
-    local mainBar = guiAsli and guiAsli:FindFirstChild("MainBar")
-
-    -- ========== MAKEOVER MAINBAR ==========
-    local function gayaTombol(b)
-        if not b then return end
-        if not (b:IsA("TextButton") or b:IsA("ImageButton")) then return end
-        pcall(function()
-            b.BackgroundColor3 = T.panel2
-            b.BackgroundTransparency = 0
-            if b:IsA("TextButton") then
-                b.TextColor3 = T.text
-                b.Font = FONT_B
-            end
-            local c = b:FindFirstChildOfClass("UICorner")
-            if not c then
-                c = Instance.new("UICorner")
-                c.Parent = b
-            end
-            c.CornerRadius = UDim.new(0, 4)
-            local s = garis(b, 1, T.border, 0)
-            local asli
-            sambung(b.MouseEnter, function()
-                asli = b.BackgroundColor3
-                tween(b, {BackgroundColor3 = T.hover})
-                s.Color = palet[idxPalet][1]
-            end)
-            sambung(b.MouseLeave, function()
-                tween(b, {BackgroundColor3 = asli or T.panel2})
-                s.Color = T.border
-            end)
-            sambung(b.MouseButton1Down, function()
-                tween(b, {BackgroundColor3 = palet[idxPalet][1]}, 0.06)
-            end)
-            sambung(b.MouseButton1Up, function()
-                tween(b, {BackgroundColor3 = T.hover}, 0.15)
-            end)
-        end)
-    end
-
-    local function gayaMainBar()
-        if not mainBar then return end
-        pcall(function()
-            mainBar.BackgroundColor3 = T.bg
-            mainBar.BackgroundTransparency = 0
-            local c = mainBar:FindFirstChildOfClass("UICorner")
-            if not c then
-                c = Instance.new("UICorner")
-                c.Parent = mainBar
-            end
-            c.CornerRadius = UDim.new(0, 6)
-            local s = garis(mainBar, 2, palet[idxPalet][1], 0)
-            table.insert(aksenObj, {s, "Color"})
-        end)
-
-        for _, anak in ipairs(mainBar:GetChildren()) do
-            if anak:IsA("TextButton") or anak:IsA("ImageButton") then
-                gayaTombol(anak)
-            elseif anak.Name == "sel" then
-                for _, t in ipairs(anak:GetChildren()) do
-                    gayaTombol(t)
-                end
-            elseif anak.Name == "Snap" then
-                pcall(function()
-                    anak.BackgroundColor3 = T.panel
-                    anak.BackgroundTransparency = 0
-                    local c = anak:FindFirstChildOfClass("UICorner") or buat("UICorner", {}, anak)
-                    c.CornerRadius = UDim.new(0, 4)
-                    garis(anak, 1, T.border, 0)
-                    for _, x in ipairs(anak:GetChildren()) do
-                        if x:IsA("TextBox") then
-                            x.BackgroundColor3 = T.bg
-                            x.TextColor3 = T.text
-                            x.PlaceholderColor3 = T.muted
-                            x.Font = FONT
-                            local cc = x:FindFirstChildOfClass("UICorner") or buat("UICorner", {}, x)
-                            cc.CornerRadius = UDim.new(0, 3)
-                            local ss = garis(x, 1, palet[idxPalet][1], 0)
-                            table.insert(aksenObj, {ss, "Color"})
-                        elseif x:IsA("TextLabel") then
-                            x.TextColor3 = T.muted
-                            x.Font = FONT
-                        end
-                    end
-                end)
-            end
+    local mainBar = cariMainBar()
+    do
+        local t0 = os.clock()
+        while not mainBar and os.clock() - t0 < 15 do
+            task.wait(0.25)
+            mainBar = cariMainBar()
         end
     end
+    if not mainBar then
+        warn("[StudioPlus] MainBar tidak ditemukan di PlayerGui.")
+        return
+    end
 
-    pcall(gayaMainBar)
+    -- tunggu layout MainBar selesai dihitung
+    task.wait(0.2)
 
-    -- ========== SCREENGUI TAMBAHAN ==========
+    local ukuranAsliBar = mainBar.Size
+
+    -- ========== LAYER NOTIFIKASI KECIL (TOAST) ==========
     local ui = buat("ScreenGui", {
         Name = "StudioPlusUI",
         ResetOnSpawn = false,
         DisplayOrder = 999,
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        IgnoreGuiInset = (guiAsli and guiAsli:IsA("ScreenGui") and guiAsli.IgnoreGuiInset) or false,
     }, playerGui)
 
-    -- ========== TOAST NOTIFIKASI ==========
     local toast = buat("TextLabel", {
-        Size = UDim2.new(0, 260, 0, 30),
+        Size = UDim2.new(0, 200, 0, 28),
         AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 14),
-        BackgroundColor3 = T.titlebar,
+        Position = UDim2.new(0.5, 0, 0, 12),
+        BackgroundColor3 = T.panel,
         BackgroundTransparency = 1,
         TextTransparency = 1,
         Text = "",
@@ -237,9 +140,9 @@ do
         TextSize = 16,
         ZIndex = 50,
     }, ui)
-    sudut(toast, 4)
-    local toastStroke = garis(toast, 1, palet[idxPalet][1], 1)
-    table.insert(aksenObj, {toastStroke, "Color"})
+    sudut(toast, 5)
+    local toastStroke = garis(toast, 1, T.aksen)
+    toastStroke.Transparency = 1
     local toastId = 0
     local function notif(teks)
         toastId += 1
@@ -247,7 +150,7 @@ do
         toast.Text = teks
         tween(toast, {BackgroundTransparency = 0, TextTransparency = 0}, 0.15)
         tween(toastStroke, {Transparency = 0}, 0.15)
-        task.delay(2.2, function()
+        task.delay(1.8, function()
             if id == toastId and toast.Parent then
                 tween(toast, {BackgroundTransparency = 1, TextTransparency = 1}, 0.25)
                 tween(toastStroke, {Transparency = 1}, 0.25)
@@ -255,265 +158,226 @@ do
         end)
     end
 
-    -- ========== PANEL UTAMA ==========
-    local lebarPanel = 236
-    local vp = kamera.ViewportSize
-    local tinggiMaks = math.clamp(vp.Y * 0.8, 220, 420)
-
-    local startX, startY = 120, 40
-    if mainBar then
+    -- ========== MAKEOVER TOMBOL BAWAAN ==========
+    local function gayaTombolAsli(b)
+        if not (b:IsA("TextButton") or b:IsA("ImageButton")) then return end
         pcall(function()
-            startX = mainBar.AbsolutePosition.X + mainBar.AbsoluteSize.X + 12
-            startY = mainBar.AbsolutePosition.Y
+            b.BackgroundColor3 = T.panel2
+            b.BackgroundTransparency = 0
+            if b:IsA("TextButton") then
+                b.TextColor3 = T.text
+                b.Font = FONT_B
+            end
+            sudut(b, 5)
+            local s = garis(b, 1, T.border)
+            local asli
+            sambung(b.MouseEnter, function()
+                asli = b.BackgroundColor3
+                tween(b, {BackgroundColor3 = T.hover})
+                s.Color = T.aksen
+            end)
+            sambung(b.MouseLeave, function()
+                tween(b, {BackgroundColor3 = asli or T.panel2})
+                s.Color = T.border
+            end)
         end)
     end
-    startX = math.clamp(startX, 6, math.max(6, vp.X - lebarPanel - 6))
-    startY = math.clamp(startY, 6, math.max(6, vp.Y - 120))
 
-    local panel = buat("Frame", {
-        Name = "Panel",
-        Size = UDim2.new(0, lebarPanel, 0, tinggiMaks),
-        Position = UDim2.new(0, startX, 0, startY),
-        BackgroundColor3 = T.bg,
-        BackgroundTransparency = 0,
-        ClipsDescendants = true,
-    }, ui)
-    sudut(panel, 6)
-    local panelStroke = garis(panel, 2, palet[idxPalet][1], 0)
-    table.insert(aksenObj, {panelStroke, "Color"})
+    pcall(function()
+        mainBar.BackgroundColor3 = T.bg
+        mainBar.BackgroundTransparency = 0
+        sudut(mainBar, 8)
+        garis(mainBar, 2, T.aksen)
+    end)
 
-    -- Header
-    local header = buat("Frame", {
-        Size = UDim2.new(1, 0, 0, 36),
-        BackgroundColor3 = T.titlebar,
-    }, panel)
-    sudut(header, 6)
-    buat("Frame", {
-        Size = UDim2.new(1, 0, 0, 6),
-        Position = UDim2.new(0, 0, 1, -6),
-        BackgroundColor3 = T.titlebar,
-        BorderSizePixel = 0,
-    }, header)
-    buat("Frame", {
-        Size = UDim2.new(1, 0, 0, 1),
-        Position = UDim2.new(0, 0, 1, 0),
-        BackgroundColor3 = T.border,
-        BorderSizePixel = 0,
-    }, header)
+    for _, anak in ipairs(mainBar:GetChildren()) do
+        if anak:IsA("TextButton") or anak:IsA("ImageButton") then
+            gayaTombolAsli(anak)
+        elseif anak.Name == "sel" then
+            for _, t in ipairs(anak:GetChildren()) do
+                gayaTombolAsli(t)
+            end
+        elseif anak.Name == "Snap" then
+            pcall(function()
+                anak.BackgroundColor3 = T.panel
+                anak.BackgroundTransparency = 0
+                sudut(anak, 5)
+                garis(anak, 1, T.border)
+                for _, x in ipairs(anak:GetChildren()) do
+                    if x:IsA("TextBox") then
+                        x.BackgroundColor3 = T.bg
+                        x.TextColor3 = T.text
+                        x.PlaceholderColor3 = T.muted
+                        x.Font = FONT
+                        sudut(x, 3)
+                        garis(x, 1, T.aksen)
+                    elseif x:IsA("TextLabel") then
+                        x.TextColor3 = T.muted
+                        x.Font = FONT
+                    end
+                end
+            end)
+        end
+    end
 
-    buat("TextLabel", {
-        Size = UDim2.new(1, -120, 0, 20),
-        Position = UDim2.new(0, 10, 0, 2),
-        BackgroundTransparency = 1,
-        Text = "Studio Plus",
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Font = Enum.Font.SourceSansBold,
-        TextSize = 18,
-        TextColor3 = T.text,
-    }, header)
+    -- ========== HITUNG POSISI TOMBOL BARU (SETELAH TOMBOL ASLI) ==========
+    local daftarAsli = {}
+    for _, n in ipairs({"select", "move", "scale", "rotate", "play", "toolbox", "partsel", "Snap"}) do
+        local c = mainBar:FindFirstChild(n)
+        if c and c:IsA("GuiObject") then
+            table.insert(daftarAsli, c)
+        end
+    end
+    -- cadangan: kalau nama tombol tidak cocok, pakai semua anak GuiObject
+    if #daftarAsli == 0 then
+        for _, c in ipairs(mainBar:GetChildren()) do
+            if c:IsA("GuiObject") then
+                table.insert(daftarAsli, c)
+            end
+        end
+    end
+    if #daftarAsli == 0 then
+        warn("[StudioPlus] Tidak ada tombol di MainBar sebagai acuan.")
+        return
+    end
 
-    local fpsLabel = buat("TextLabel", {
-        Size = UDim2.new(0, 80, 0, 12),
-        Position = UDim2.new(0, 10, 0, 21),
-        BackgroundTransparency = 1,
-        Text = "FPS 60",
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Font = FONT,
-        TextSize = 12,
-        TextColor3 = T.muted,
-    }, header)
+    local function posLokal(c)
+        if mainBar.Rotation == 0 then
+            return c.AbsolutePosition - mainBar.AbsolutePosition
+        end
+        local ps = mainBar.AbsoluteSize
+        return Vector2.new(
+            c.Position.X.Scale * ps.X + c.Position.X.Offset - c.AnchorPoint.X * c.AbsoluteSize.X,
+            c.Position.Y.Scale * ps.Y + c.Position.Y.Offset - c.AnchorPoint.Y * c.AbsoluteSize.Y
+        )
+    end
 
-    local function tombolHeader(teks, x, warna)
+    local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
+    for _, c in ipairs(daftarAsli) do
+        local p = posLokal(c)
+        minX, maxX = math.min(minX, p.X), math.max(maxX, p.X)
+        minY, maxY = math.min(minY, p.Y), math.max(maxY, p.Y)
+    end
+
+    -- sumbu utama deret tombol (horizontal atau vertikal)
+    local sumbuX = (maxX - minX) >= (maxY - minY)
+
+    local ujung = 0
+    for _, c in ipairs(daftarAsli) do
+        local p = posLokal(c)
+        local akhir = sumbuX and (p.X + c.AbsoluteSize.X) or (p.Y + c.AbsoluteSize.Y)
+        ujung = math.max(ujung, akhir)
+    end
+
+    local acuan = mainBar:FindFirstChild("select") or daftarAsli[1]
+    local pAcuan = posLokal(acuan)
+    local sAcuan = acuan.AbsoluteSize
+    if sAcuan.X <= 0 or sAcuan.Y <= 0 then
+        sAcuan = Vector2.new(40, 40)
+    end
+    local JARAK = 4
+    local kursor = ujung + JARAK
+
+    -- ========== PEMBUAT TOMBOL BARU (IKON + TEKS + INDIKATOR) ==========
+    local tombolBaru = {}
+
+    local function buatTombol(judul, ikon, nilaiAwal, klik)
+        local pos = sumbuX and Vector2.new(kursor, pAcuan.Y) or Vector2.new(pAcuan.X, kursor)
+        kursor = kursor + (sumbuX and sAcuan.X or sAcuan.Y) + JARAK
+
         local b = buat("TextButton", {
-            Size = UDim2.new(0, 26, 0, 24),
-            Position = UDim2.new(1, x, 0.5, -12),
-            BackgroundColor3 = warna or T.panel2,
-            Text = teks,
-            Font = FONT_B,
-            TextSize = 16,
-            TextColor3 = T.text,
-            AutoButtonColor = true,
-        }, header)
-        sudut(b, 4)
-        garis(b, 1, T.border, 0)
-        return b
-    end
-    local btnMin = tombolHeader("–", -92)
-    local btnWarna = tombolHeader("◐", -62)
-    local btnTutup = tombolHeader("✕", -32, T.danger)
-
-    -- Body (scroll)
-    local body = buat("ScrollingFrame", {
-        Size = UDim2.new(1, -12, 1, -44),
-        Position = UDim2.new(0, 6, 0, 40),
-        BackgroundTransparency = 1,
-        BorderSizePixel = 0,
-        ScrollBarThickness = 4,
-        ScrollBarImageColor3 = palet[idxPalet][1],
-        CanvasSize = UDim2.new(0, 0, 0, 0),
-        AutomaticCanvasSize = Enum.AutomaticSize.Y,
-    }, panel)
-    table.insert(aksenObj, {body, "ScrollBarImageColor3"})
-    buat("UIListLayout", {Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder}, body)
-    buat("UIPadding", {PaddingBottom = UDim.new(0, 8), PaddingRight = UDim.new(0, 6)}, body)
-
-    local urutan = 0
-    local function nomor()
-        urutan += 1
-        return urutan
-    end
-
-    -- ---- Komponen ----
-    local function seksi(teks)
-        local l = buat("TextLabel", {
-            Size = UDim2.new(1, 0, 0, 22),
-            BackgroundColor3 = T.titlebar,
-            Text = "  " .. teks,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Font = Enum.Font.SourceSansBold,
-            TextSize = 15,
-            TextColor3 = T.text,
-            LayoutOrder = nomor(),
-        }, body)
-        sudut(l, 3)
-        local bar = buat("Frame", {
-            Size = UDim2.new(0, 3, 1, 0),
-            BackgroundColor3 = palet[idxPalet][1],
-            BorderSizePixel = 0,
-        }, l)
-        table.insert(aksenObj, {bar, "BackgroundColor3"})
-        return l
-    end
-
-    local function tombol(teks, fn, warna)
-        local b = buat("TextButton", {
-            Size = UDim2.new(1, 0, 0, 30),
-            BackgroundColor3 = warna or T.panel2,
-            Text = teks,
-            Font = FONT_B,
-            TextSize = 16,
-            TextColor3 = T.text,
+            Name = "SP_" .. judul,
+            Size = UDim2.fromOffset(sAcuan.X, sAcuan.Y),
+            Position = UDim2.fromOffset(pos.X, pos.Y),
+            AnchorPoint = Vector2.new(0, 0),
+            BackgroundColor3 = T.panel2,
             AutoButtonColor = false,
-            LayoutOrder = nomor(),
-        }, body)
-        sudut(b, 4)
-        local s = garis(b, 1, T.border, 0)
-        sambung(b.MouseEnter, function()
-            tween(b, {BackgroundColor3 = T.hover})
-            s.Color = palet[idxPalet][1]
-        end)
-        sambung(b.MouseLeave, function()
-            tween(b, {BackgroundColor3 = warna or T.panel2})
-            s.Color = T.border
-        end)
-        sambung(b.MouseButton1Click, function()
-            pcall(fn)
-        end)
-        return b
-    end
-
-    local function toggle(teks, awal, fn)
-        local baris = buat("TextButton", {
-            Size = UDim2.new(1, 0, 0, 32),
-            BackgroundColor3 = T.panel,
             Text = "",
-            AutoButtonColor = false,
-            LayoutOrder = nomor(),
-        }, body)
-        sudut(baris, 4)
-        garis(baris, 1, T.border, 0)
-        buat("TextLabel", {
-            Size = UDim2.new(1, -56, 1, 0),
-            Position = UDim2.new(0, 10, 0, 0),
-            BackgroundTransparency = 1,
-            Text = teks,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Font = FONT,
-            TextSize = 16,
-            TextColor3 = T.text,
-        }, baris)
-        local kotak = buat("Frame", {
-            Size = UDim2.new(0, 18, 0, 18),
-            Position = UDim2.new(1, -28, 0.5, -9),
-            BackgroundColor3 = T.bg,
-        }, baris)
-        sudut(kotak, 3)
-        local ks = garis(kotak, 1, T.off, 0)
-        local centang = buat("TextLabel", {
-            Size = UDim2.new(1, 0, 1, 0),
-            BackgroundTransparency = 1,
-            Text = "✓",
-            Font = Enum.Font.SourceSansBold,
-            TextSize = 16,
-            TextColor3 = Color3.new(1, 1, 1),
-            TextTransparency = 1,
-        }, kotak)
-        local nilai = false
-        local function set(v, diam)
-            nilai = v
-            tween(kotak, {BackgroundColor3 = v and palet[idxPalet][1] or T.bg})
-            tween(centang, {TextTransparency = v and 0 or 1})
-            ks.Color = v and palet[idxPalet][1] or T.off
-            if not diam then pcall(fn, v) end
-        end
-        sambung(baris.MouseButton1Click, function() set(not nilai) end)
-        if awal then set(true) end
-        return set
-    end
+            ClipsDescendants = true,
+        }, mainBar)
+        sudut(b, 5)
+        local s = garis(b, 1, T.border)
 
-    local function stepper(teks, min, maks, langkah, awal, fn)
-        local baris = buat("Frame", {
-            Size = UDim2.new(1, 0, 0, 34),
-            BackgroundColor3 = T.panel,
-            LayoutOrder = nomor(),
-        }, body)
-        sudut(baris, 4)
-        garis(baris, 1, T.border, 0)
-        buat("TextLabel", {
-            Size = UDim2.new(0.42, 0, 1, 0),
-            Position = UDim2.new(0, 10, 0, 0),
+        -- gradasi halus ala tombol modern
+        buat("UIGradient", {
+            Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(190, 190, 190)),
+            Rotation = 90,
+        }, b)
+
+        -- ikon (glyph)
+        local lblIkon = buat("TextLabel", {
+            Name = "Ikon",
+            Size = UDim2.new(1, 0, 0.58, 0),
+            Position = UDim2.new(0, 0, 0.04, 0),
             BackgroundTransparency = 1,
-            Text = teks,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            Font = FONT,
-            TextSize = 16,
+            Text = ikon,
             TextColor3 = T.text,
-        }, baris)
-        local nilai = awal
-        local lbl = buat("TextLabel", {
-            Size = UDim2.new(0, 44, 1, 0),
-            Position = UDim2.new(1, -112, 0, 0),
-            BackgroundTransparency = 1,
-            Text = tostring(nilai),
             Font = Enum.Font.SourceSansBold,
-            TextSize = 16,
-            TextColor3 = palet[idxPalet][1],
-        }, baris)
-        table.insert(aksenObj, {lbl, "TextColor3"})
-        local function kecil(t, x)
-            local b = buat("TextButton", {
-                Size = UDim2.new(0, 26, 0, 24),
-                Position = UDim2.new(1, x, 0.5, -12),
-                BackgroundColor3 = T.panel2,
-                Text = t,
-                Font = Enum.Font.SourceSansBold,
-                TextSize = 18,
-                TextColor3 = T.text,
-            }, baris)
-            sudut(b, 4)
-            garis(b, 1, T.border, 0)
-            return b
+            TextScaled = true,
+        }, b)
+        buat("UITextSizeConstraint", {MaxTextSize = 24, MinTextSize = 10}, lblIkon)
+
+        -- teks nilai / status
+        local lblNilai = buat("TextLabel", {
+            Name = "Nilai",
+            Size = UDim2.new(1, -4, 0.30, 0),
+            Position = UDim2.new(0, 2, 0.62, 0),
+            BackgroundTransparency = 1,
+            Text = nilaiAwal,
+            TextColor3 = T.muted,
+            Font = FONT_B,
+            TextScaled = true,
+        }, b)
+        buat("UITextSizeConstraint", {MaxTextSize = 14, MinTextSize = 7}, lblNilai)
+
+        -- garis indikator di bawah tombol
+        local indikator = buat("Frame", {
+            Name = "Indikator",
+            Size = UDim2.new(0.7, 0, 0, 3),
+            AnchorPoint = Vector2.new(0.5, 1),
+            Position = UDim2.new(0.5, 0, 1, -2),
+            BackgroundColor3 = T.aksen,
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+        }, b)
+        sudut(indikator, 2)
+
+        local warnaDasar = T.panel2
+        sambung(b.MouseEnter, function() s.Color = T.aksen end)
+        sambung(b.MouseLeave, function() s.Color = T.border end)
+        sambung(b.MouseButton1Click, function()
+            tween(b, {BackgroundColor3 = T.hover}, 0.06)
+            task.delay(0.07, function()
+                if b.Parent then tween(b, {BackgroundColor3 = warnaDasar}, 0.12) end
+            end)
+            pcall(klik)
+        end)
+
+        local obj = {}
+        -- status: "aktif" / "menunggu" / nil
+        function obj.set(nilai, status)
+            if not b.Parent then return end
+            lblNilai.Text = nilai
+            if status == "aktif" then
+                warnaDasar = Color3.fromRGB(28, 66, 98)
+                tween(indikator, {BackgroundTransparency = 0, BackgroundColor3 = T.aksen})
+                lblNilai.TextColor3 = Color3.new(1, 1, 1)
+                lblIkon.TextColor3 = T.aksen
+            elseif status == "menunggu" then
+                warnaDasar = Color3.fromRGB(88, 62, 24)
+                tween(indikator, {BackgroundTransparency = 0, BackgroundColor3 = T.pending})
+                lblNilai.TextColor3 = Color3.new(1, 1, 1)
+                lblIkon.TextColor3 = T.pending
+            else
+                warnaDasar = T.panel2
+                tween(indikator, {BackgroundTransparency = 1})
+                lblNilai.TextColor3 = T.muted
+                lblIkon.TextColor3 = T.text
+            end
+            tween(b, {BackgroundColor3 = warnaDasar})
         end
-        local kurang = kecil("−", -140)
-        local tambah = kecil("+", -34)
-        local function ubah(d)
-            nilai = math.clamp(nilai + d, min, maks)
-            lbl.Text = tostring(nilai)
-            pcall(fn, nilai)
-        end
-        sambung(kurang.MouseButton1Click, function() ubah(-langkah) end)
-        sambung(tambah.MouseButton1Click, function() ubah(langkah) end)
-        return function() return nilai end
+        table.insert(tombolBaru, b)
+        return obj
     end
 
     -- ========== LOGIKA KARAKTER ==========
@@ -524,65 +388,88 @@ do
         return char, hum, hrp
     end
 
-    local kecJalan, kuatLompat = nil, nil
-    local flyAktif, flyKec = false, 60
-    local noclipAktif, lompatTakTerbatas = false, false
-    local bv, bg
+    -- ========== FITUR 1: SWITCH RIG R6 / R15 ==========
+    -- Tombol hanya mengatur PILIHAN rig. Rig baru dipakai saat
+    -- karakter spawn berikutnya (Play / Reset / mati).
+    local R6 = Enum.HumanoidRigType.R6
+    local R15 = Enum.HumanoidRigType.R15
 
-    -- ---- Rig R6 / R15 ----
-    local rigLabel
-    local tombolR6, tombolR15
-
-    local function perbaruiRigUI()
+    local rigPilihan = R15
+    do
         local _, hum = ambilKarakter()
-        local r6 = hum and hum.RigType == Enum.HumanoidRigType.R6
-        if tombolR6 and tombolR15 then
-            tween(tombolR6, {BackgroundColor3 = r6 and palet[idxPalet][1] or T.panel2})
-            tween(tombolR15, {BackgroundColor3 = (hum and not r6) and palet[idxPalet][1] or T.panel2})
-        end
-        if rigLabel then
-            rigLabel.Text = "Rig saat ini: " .. (hum and (r6 and "R6" or "R15") or "-")
+        if hum then rigPilihan = hum.RigType end
+    end
+
+    local tombolRig
+    local sedangGanti = false
+
+    local function perbaruiTombolRig()
+        if not tombolRig then return end
+        local _, hum = ambilKarakter()
+        local namaPilih = (rigPilihan == R6) and "R6" or "R15"
+        local sekarang = hum and ((hum.RigType == R6) and "R6" or "R15") or nil
+        if sekarang and sekarang ~= namaPilih then
+            tombolRig.set("→ " .. namaPilih, "menunggu")
+        else
+            tombolRig.set(namaPilih, "aktif")
         end
     end
 
-    local function gantiRig(tipe)
-        local char, hum, hrp = ambilKarakter()
-        if hum and hum.RigType == tipe then
-            notif("Sudah memakai " .. (tipe == Enum.HumanoidRigType.R6 and "R6" or "R15"))
+    local function terapkanRigSaatSpawn(char)
+        local hum = char:WaitForChild("Humanoid", 5)
+        if not hum then return end
+        if hum.RigType == rigPilihan or sedangGanti then
+            perbaruiTombolRig()
             return
         end
-        notif("Mengganti rig...")
+        sedangGanti = true
         task.spawn(function()
+            local hrp = char:WaitForChild("HumanoidRootPart", 5)
             local cf = hrp and hrp.CFrame or CFrame.new(0, 10, 0)
             local ok, err = pcall(function()
                 local desc = Players:GetHumanoidDescriptionFromUserId(player.UserId)
-                local model = Players:CreateHumanoidModelFromDescription(desc, tipe)
+                local model = Players:CreateHumanoidModelFromDescription(desc, rigPilihan)
                 model.Name = player.Name
-                local lamaChar = player.Character
                 player.Character = model
                 model.Parent = Workspace
-                model:PivotTo(cf + Vector3.new(0, 3, 0))
-                if lamaChar then lamaChar:Destroy() end
+                model:PivotTo(cf)
+                if char and char.Parent then char:Destroy() end
                 local hBaru = model:WaitForChild("Humanoid", 5)
-                if hBaru and Workspace.CurrentCamera then
-                    Workspace.CurrentCamera.CameraSubject = hBaru
-                end
+                local cam = Workspace.CurrentCamera
+                if hBaru and cam then cam.CameraSubject = hBaru end
             end)
-            if ok then
-                notif("Rig diganti ke " .. (tipe == Enum.HumanoidRigType.R6 and "R6" or "R15"))
-            else
-                notif("Gagal ganti rig")
+            if not ok then
                 warn("[StudioPlus] Gagal ganti rig:", err)
+                notif("Gagal ganti rig")
             end
-            task.wait(0.6)
-            perbaruiRigUI()
+            sedangGanti = false
+            task.wait(0.3)
+            perbaruiTombolRig()
         end)
     end
 
-    -- ---- Fly ----
+    tombolRig = buatTombol("Rig", "☺", "R15", function()
+        rigPilihan = (rigPilihan == R6) and R15 or R6
+        perbaruiTombolRig()
+        notif("Rig dipilih: " .. ((rigPilihan == R6) and "R6" or "R15") .. " (aktif saat respawn)")
+    end)
+    perbaruiTombolRig()
+
+    -- ========== FITUR 2: RESET (RESPAWN) ==========
+    buatTombol("Reset", "⟲", "Respawn", function()
+        local _, hum = ambilKarakter()
+        if hum then hum.Health = 0 end
+        notif("Respawn...")
+    end)
+
+    -- ========== FITUR 3: FLY ==========
+    local flyAktif, flyKec = false, 60
+    local bv, bg
+    local tombolFly
+
     local function setFly(on)
         flyAktif = on
-        local char, hum, hrp = ambilKarakter()
+        local _, hum, hrp = ambilKarakter()
         if bv then bv:Destroy() bv = nil end
         if bg then bg:Destroy() bg = nil end
         if on and hrp and hum then
@@ -592,56 +479,53 @@ do
         elseif hum then
             hum.PlatformStand = false
         end
+        if tombolFly then tombolFly.set(on and "ON" or "OFF", on and "aktif" or nil) end
     end
 
-    sambung(RunService.Heartbeat, function()
-        local _, hum, hrp = ambilKarakter()
-        if not hum then return end
-        if kecJalan then hum.WalkSpeed = kecJalan end
-        if kuatLompat then
-            hum.UseJumpPower = true
-            hum.JumpPower = kuatLompat
-        end
-        local cam = Workspace.CurrentCamera
-        if flyAktif and bv and bg and bv.Parent and hrp and cam then
-            local md = hum.MoveDirection
-            local cf = cam.CFrame
-            if md.Magnitude > 0.05 then
-                local datar = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
-                local kanan = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
-                local maju = datar.Magnitude > 0 and md:Dot(datar.Unit) or 0
-                local geser = kanan.Magnitude > 0 and md:Dot(kanan.Unit) or 0
-                bv.Velocity = (cf.LookVector * maju + cf.RightVector * geser) * flyKec
-            else
-                bv.Velocity = Vector3.zero
-            end
-            bg.CFrame = cf
-        end
+    tombolFly = buatTombol("Fly", "✈", "OFF", function()
+        setFly(not flyAktif)
+        notif(flyAktif and "Fly aktif" or "Fly mati")
     end)
 
-    -- ---- Noclip ----
-    sambung(RunService.Stepped, function()
-        if noclipAktif then
-            local char = player.Character
-            if char then
-                for _, p in ipairs(char:GetDescendants()) do
-                    if p:IsA("BasePart") then p.CanCollide = false end
-                end
-            end
-        end
+    -- ========== FITUR 4: NOCLIP ==========
+    local noclipAktif = false
+    local tombolNoclip
+    tombolNoclip = buatTombol("Noclip", "◌", "OFF", function()
+        noclipAktif = not noclipAktif
+        tombolNoclip.set(noclipAktif and "ON" or "OFF", noclipAktif and "aktif" or nil)
+        notif(noclipAktif and "Noclip aktif" or "Noclip mati")
     end)
 
-    -- ---- Lompat tak terbatas ----
-    sambung(UserInputService.JumpRequest, function()
-        if lompatTakTerbatas then
-            local _, hum = ambilKarakter()
-            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-        end
+    -- ========== FITUR 5: SPEED (GANTI PUTARAN) ==========
+    local daftarSpeed = {false, 32, 50, 80, 120}
+    local idxSpeed = 1
+    local kecJalan = nil
+    local tombolSpeed
+    tombolSpeed = buatTombol("Speed", "⚡", "Normal", function()
+        idxSpeed = idxSpeed % #daftarSpeed + 1
+        local v = daftarSpeed[idxSpeed]
+        kecJalan = v or nil
+        local _, hum = ambilKarakter()
+        if hum and not v then hum.WalkSpeed = 16 end
+        tombolSpeed.set(v and tostring(v) or "Normal", v and "aktif" or nil)
+        notif("Speed: " .. (v and tostring(v) or "Normal"))
     end)
 
-    -- ---- Fullbright ----
+    -- ========== FITUR 6: LOMPAT TAK TERBATAS ==========
+    local lompatTakTerbatas = false
+    local tombolJump
+    tombolJump = buatTombol("Jump", "⇧", "OFF", function()
+        lompatTakTerbatas = not lompatTakTerbatas
+        tombolJump.set(lompatTakTerbatas and "ON" or "OFF", lompatTakTerbatas and "aktif" or nil)
+        notif(lompatTakTerbatas and "Infinite Jump aktif" or "Infinite Jump mati")
+    end)
+
+    -- ========== FITUR 7: TERANG (FULLBRIGHT) ==========
     local lightAsli
-    local function setFullbright(on)
+    local terangAktif = false
+    local tombolTerang
+    local function setTerang(on)
+        terangAktif = on
         if on then
             if not lightAsli then
                 lightAsli = {
@@ -663,220 +547,96 @@ do
             for k, v in pairs(lightAsli) do Lighting[k] = v end
             lightAsli = nil
         end
+        if tombolTerang then tombolTerang.set(on and "ON" or "OFF", on and "aktif" or nil) end
+    end
+    tombolTerang = buatTombol("Terang", "☀", "OFF", function()
+        setTerang(not terangAktif)
+        notif(terangAktif and "Terang aktif" or "Terang mati")
+    end)
+
+    -- ========== PERPANJANG MAINBAR JIKA TOMBOL MELEBIHI UKURAN ==========
+    do
+        local perlu = kursor
+        local saatIni = sumbuX and mainBar.AbsoluteSize.X or mainBar.AbsoluteSize.Y
+        if perlu > saatIni then
+            local tambah = perlu - saatIni + JARAK
+            local S = mainBar.Size
+            if sumbuX then
+                mainBar.Size = UDim2.new(S.X.Scale, S.X.Offset + tambah, S.Y.Scale, S.Y.Offset)
+            else
+                mainBar.Size = UDim2.new(S.X.Scale, S.X.Offset, S.Y.Scale, S.Y.Offset + tambah)
+            end
+        end
     end
 
-    -- ---- Respawn ----
-    sambung(player.CharacterAdded, function(char)
-        char:WaitForChild("Humanoid", 5)
-        task.wait(0.5)
-        if flyAktif then setFly(true) end
-        perbaruiRigUI()
-    end)
-
-    -- ========== ISI PANEL ==========
-    seksi("Rig Karakter")
-
-    rigLabel = buat("TextLabel", {
-        Size = UDim2.new(1, 0, 0, 18),
-        BackgroundTransparency = 1,
-        Text = "Rig saat ini: -",
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Font = FONT,
-        TextSize = 15,
-        TextColor3 = T.muted,
-        LayoutOrder = nomor(),
-    }, body)
-
-    local barisRig = buat("Frame", {
-        Size = UDim2.new(1, 0, 0, 34),
-        BackgroundTransparency = 1,
-        LayoutOrder = nomor(),
-    }, body)
-    tombolR6 = buat("TextButton", {
-        Size = UDim2.new(0.5, -3, 1, 0),
-        BackgroundColor3 = T.panel2,
-        Text = "R6",
-        Font = Enum.Font.SourceSansBold,
-        TextSize = 18,
-        TextColor3 = T.text,
-    }, barisRig)
-    sudut(tombolR6, 4)
-    garis(tombolR6, 1, T.border, 0)
-    tombolR15 = buat("TextButton", {
-        Size = UDim2.new(0.5, -3, 1, 0),
-        Position = UDim2.new(0.5, 3, 0, 0),
-        BackgroundColor3 = T.panel2,
-        Text = "R15",
-        Font = Enum.Font.SourceSansBold,
-        TextSize = 18,
-        TextColor3 = T.text,
-    }, barisRig)
-    sudut(tombolR15, 4)
-    garis(tombolR15, 1, T.border, 0)
-    sambung(tombolR6.MouseButton1Click, function() gantiRig(Enum.HumanoidRigType.R6) end)
-    sambung(tombolR15.MouseButton1Click, function() gantiRig(Enum.HumanoidRigType.R15) end)
-    perbaruiRigUI()
-
-    seksi("Gerakan")
-    toggle("Terbang (Fly)", false, function(v)
-        setFly(v)
-        notif(v and "Fly aktif" or "Fly mati")
-    end)
-    stepper("Kec. Fly", 20, 300, 20, 60, function(v) flyKec = v end)
-    toggle("Noclip", false, function(v)
-        noclipAktif = v
-        notif(v and "Noclip aktif" or "Noclip mati")
-    end)
-    toggle("Lompat Tak Terbatas", false, function(v)
-        lompatTakTerbatas = v
-        notif(v and "Infinite Jump aktif" or "Infinite Jump mati")
-    end)
-    stepper("Kec. Jalan", 8, 200, 8, 16, function(v) kecJalan = v end)
-    stepper("Kuat Lompat", 25, 300, 25, 50, function(v) kuatLompat = v end)
-
-    seksi("Dunia")
-    toggle("Fullbright", false, function(v)
-        setFullbright(v)
-        notif(v and "Fullbright aktif" or "Fullbright mati")
-    end)
-    stepper("Jam Dunia", 0, 24, 2, 14, function(v)
-        Lighting.ClockTime = v
-    end)
-    stepper("Gravitasi", 20, 400, 20, math.clamp(math.floor(Workspace.Gravity), 20, 400), function(v)
-        Workspace.Gravity = v
-    end)
-
-    seksi("Aksi Cepat")
-    tombol("Reset Karakter", function()
-        local _, hum = ambilKarakter()
-        if hum then hum.Health = 0 end
-        notif("Karakter direset")
-    end)
-    tombol("Teleport ke Kamera", function()
-        local _, _, hrp = ambilKarakter()
+    -- ========== LOOP UTAMA ==========
+    sambung(RunService.Heartbeat, function()
+        local _, hum, hrp = ambilKarakter()
+        if not hum then return end
+        if kecJalan then hum.WalkSpeed = kecJalan end
         local cam = Workspace.CurrentCamera
-        if hrp and cam then
-            hrp.CFrame = cam.CFrame + cam.CFrame.LookVector * 5
-            notif("Teleport ke kamera")
-        end
-    end)
-    tombol("Anchor / Lepas Anchor", function()
-        local _, _, hrp = ambilKarakter()
-        if hrp then
-            hrp.Anchored = not hrp.Anchored
-            notif(hrp.Anchored and "Karakter di-anchor" or "Anchor dilepas")
-        end
-    end)
-    tombol("Hapus Semua Aksesori", function()
-        local char = player.Character
-        if char then
-            for _, a in ipairs(char:GetChildren()) do
-                if a:IsA("Accessory") then a:Destroy() end
+        if flyAktif and bv and bg and bv.Parent and hrp and cam then
+            local md = hum.MoveDirection
+            local cf = cam.CFrame
+            if md.Magnitude > 0.05 then
+                local datar = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
+                local kanan = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
+                local maju = datar.Magnitude > 0 and md:Dot(datar.Unit) or 0
+                local geser = kanan.Magnitude > 0 and md:Dot(kanan.Unit) or 0
+                bv.Velocity = (cf.LookVector * maju + cf.RightVector * geser) * flyKec
+            else
+                bv.Velocity = Vector3.zero
             end
-            notif("Aksesori dihapus")
-        end
-    end)
-    tombol("Kembalikan Tampilan Asli", function()
-        local _, hum = ambilKarakter()
-        if hum then
-            local ok = pcall(function()
-                hum:ApplyDescription(Players:GetHumanoidDescriptionFromUserId(player.UserId))
-            end)
-            notif(ok and "Tampilan dikembalikan" or "Gagal")
+            bg.CFrame = cf
         end
     end)
 
-    seksi("Tampilan UI")
-    toggle("Tampilkan MainBar", true, function(v)
-        if mainBar then mainBar.Visible = v end
-    end)
-    tombol("Ganti Warna Aksen", function()
-        idxPalet = idxPalet % #palet + 1
-        terapkanAksen()
-        perbaruiRigUI()
-        notif("Warna aksen #" .. idxPalet)
-    end)
-    stepper("Transparansi", 0, 8, 1, 0, function(v)
-        panel.BackgroundTransparency = v * 0.08
+    sambung(RunService.Stepped, function()
+        if noclipAktif then
+            local char = player.Character
+            if char then
+                for _, p in ipairs(char:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+            end
+        end
     end)
 
-    -- ========== TOMBOL HEADER ==========
-    local minimal = false
-    sambung(btnMin.MouseButton1Click, function()
-        minimal = not minimal
-        body.Visible = not minimal
-        tween(panel, {Size = UDim2.new(0, lebarPanel, 0, minimal and 36 or tinggiMaks)}, 0.2)
-        btnMin.Text = minimal and "+" or "–"
+    sambung(UserInputService.JumpRequest, function()
+        if lompatTakTerbatas then
+            local _, hum = ambilKarakter()
+            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+        end
     end)
 
-    sambung(btnWarna.MouseButton1Click, function()
-        idxPalet = idxPalet % #palet + 1
-        terapkanAksen()
-        perbaruiRigUI()
-        notif("Warna aksen #" .. idxPalet)
+    -- ========== SAAT KARAKTER SPAWN ==========
+    sambung(player.CharacterAdded, function(char)
+        terapkanRigSaatSpawn(char)
+        task.wait(0.6)
+        if flyAktif then setFly(true) end
+        perbaruiTombolRig()
     end)
 
-    local function bersihkan()
-        setFly(false)
-        setFullbright(false)
+    -- ========== PEMBERSIH (DIPANGGIL SAAT SCRIPT DIJALANKAN ULANG) ==========
+    genv.StudioPlusBersih = function()
+        pcall(function() setFly(false) end)
+        pcall(function() setTerang(false) end)
         noclipAktif = false
         lompatTakTerbatas = false
-        kecJalan, kuatLompat = nil, nil
+        kecJalan = nil
         for _, c in ipairs(koneksi) do
             pcall(function() c:Disconnect() end)
         end
         table.clear(koneksi)
-        if ui then ui:Destroy() end
-    end
-    genv.StudioPlusBersih = bersihkan
-
-    sambung(btnTutup.MouseButton1Click, bersihkan)
-
-    -- ========== DRAG PANEL ==========
-    do
-        local geser, awalInput, awalPosisi = false, nil, nil
-        sambung(header.InputBegan, function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
-                geser = true
-                awalInput = input.Position
-                awalPosisi = panel.Position
-                sambung(input.Changed, function()
-                    if input.UserInputState == Enum.UserInputState.End then geser = false end
-                end)
-            end
-        end)
-        sambung(UserInputService.InputChanged, function(input)
-            if geser and awalInput and awalPosisi
-                and (input.UserInputType == Enum.UserInputType.MouseMovement
-                or input.UserInputType == Enum.UserInputType.Touch) then
-                local d = input.Position - awalInput
-                panel.Position = UDim2.new(
-                    awalPosisi.X.Scale, awalPosisi.X.Offset + d.X,
-                    awalPosisi.Y.Scale, awalPosisi.Y.Offset + d.Y
-                )
-            end
-        end)
+        for _, b in ipairs(tombolBaru) do
+            pcall(function() b:Destroy() end)
+        end
+        pcall(function() mainBar.Size = ukuranAsliBar end)
+        pcall(function() if ui then ui:Destroy() end end)
     end
 
-    -- ========== FPS COUNTER ==========
-    do
-        local frame, waktu = 0, tick()
-        sambung(RunService.RenderStepped, function()
-            frame += 1
-            local now = tick()
-            if now - waktu >= 0.5 then
-                fpsLabel.Text = "FPS " .. math.floor(frame / (now - waktu))
-                frame, waktu = 0, now
-            end
-        end)
-    end
-
-    -- ========== ANIMASI MASUK ==========
-    panel.Size = UDim2.new(0, lebarPanel, 0, 0)
-    tween(panel, {Size = UDim2.new(0, lebarPanel, 0, tinggiMaks)}, 0.3)
-    notif("Studio Plus aktif")
-end
+    notif("MainBar Plus aktif")
+end)
 
 -- ========================================================================
 -- BAGIAN 2: COLORPALETTE REMAKE
