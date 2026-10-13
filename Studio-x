@@ -1,6 +1,192 @@
--- MainBar Plus + ColorPalette Remake
--- MainBar: tombol Rig R6/R15 (pilih lewat tombol Rig, rig baru diterapkan setelah tombol PLAY ditekan)
+-- MainBar Plus + ColorPalette Remake (tema Roblox Studio) + Intro Loading
 -- Catatan: Roblox tidak bisa render SVG, jadi ikon memakai glyph/emoji
+
+-- ========================================================================
+-- BAGIAN 0: INTRO LOADING (logo tengah + lingkaran muter + tombol Skip)
+-- ========================================================================
+task.spawn(function()
+    -- ISI DI SINI: upload logo ke Roblox, lalu tempel ID-nya. Contoh: "rbxassetid://1234567890"
+    local LOGO_ID = "116468253132435"
+    local DURASI = 8 -- detik sebelum intro tutup otomatis
+
+    local Players = game:GetService("Players")
+    local TweenService = game:GetService("TweenService")
+    local RunService = game:GetService("RunService")
+
+    local player = Players.LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
+
+    local lama = playerGui:FindFirstChild("StudioPlusIntro")
+    if lama then lama:Destroy() end
+
+    local BIRU = Color3.fromRGB(0, 162, 255)
+    local CYAN = Color3.fromRGB(0, 230, 255)
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "StudioPlusIntro"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 10000
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Parent = playerGui
+
+    local bg = Instance.new("TextButton")
+    bg.Name = "Background"
+    bg.AutoButtonColor = false
+    bg.Text = ""
+    bg.Size = UDim2.fromScale(1, 1)
+    bg.BackgroundColor3 = Color3.new(0, 0, 0)
+    bg.BorderSizePixel = 0
+    bg.ZIndex = 1
+    bg.Parent = gui
+
+    -- Lingkaran muter
+    local ring = Instance.new("Frame")
+    ring.Name = "Ring"
+    ring.AnchorPoint = Vector2.new(0.5, 0.5)
+    ring.Position = UDim2.fromScale(0.5, 0.5)
+    ring.Size = UDim2.fromOffset(210, 210)
+    ring.BackgroundTransparency = 1
+    ring.ZIndex = 2
+    ring.Parent = bg
+    local rc = Instance.new("UICorner")
+    rc.CornerRadius = UDim.new(1, 0)
+    rc.Parent = ring
+
+    local ringStroke = Instance.new("UIStroke")
+    ringStroke.Thickness = 5
+    ringStroke.Color = Color3.new(1, 1, 1)
+    ringStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    ringStroke.Parent = ring
+
+    local ringGrad = Instance.new("UIGradient")
+    ringGrad.Color = ColorSequence.new(CYAN, BIRU)
+    ringGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0),
+        NumberSequenceKeypoint.new(0.55, 0.15),
+        NumberSequenceKeypoint.new(0.56, 1),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    ringGrad.Parent = ringStroke
+
+    -- Logo tengah
+    local logo
+    if LOGO_ID ~= "" then
+        logo = Instance.new("ImageLabel")
+        logo.Image = LOGO_ID
+        logo.ScaleType = Enum.ScaleType.Fit
+        logo.ImageTransparency = 1
+    else
+        logo = Instance.new("TextLabel")
+        logo.Text = "X"
+        logo.Font = Enum.Font.Antique
+        logo.TextScaled = true
+        logo.TextColor3 = Color3.new(1, 1, 1)
+        logo.TextTransparency = 1
+        local lg = Instance.new("UIGradient")
+        lg.Color = ColorSequence.new(CYAN, BIRU)
+        lg.Rotation = 45
+        lg.Parent = logo
+    end
+    logo.Name = "Logo"
+    logo.AnchorPoint = Vector2.new(0.5, 0.5)
+    logo.Position = UDim2.fromScale(0.5, 0.5)
+    logo.Size = UDim2.fromOffset(120, 120)
+    logo.BackgroundTransparency = 1
+    logo.ZIndex = 3
+    logo.Parent = bg
+
+    -- Teks loading
+    local lbl = Instance.new("TextLabel")
+    lbl.Name = "LoadingText"
+    lbl.AnchorPoint = Vector2.new(0.5, 0)
+    lbl.Position = UDim2.new(0.5, 0, 0.5, 125)
+    lbl.Size = UDim2.fromOffset(200, 20)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = "Loading..."
+    lbl.Font = Enum.Font.SourceSans
+    lbl.TextSize = 16
+    lbl.TextColor3 = Color3.fromRGB(150, 150, 150)
+    lbl.TextTransparency = 1
+    lbl.ZIndex = 3
+    lbl.Parent = bg
+
+    -- Tombol Skip (pojok kanan bawah)
+    local skip = Instance.new("TextButton")
+    skip.Name = "Skip"
+    skip.AnchorPoint = Vector2.new(1, 1)
+    skip.Position = UDim2.new(1, -16, 1, -16)
+    skip.Size = UDim2.fromOffset(88, 34)
+    skip.AutoButtonColor = false
+    skip.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    skip.BorderSizePixel = 0
+    skip.Text = "Skip  ›"
+    skip.Font = Enum.Font.SourceSans
+    skip.TextSize = 18
+    skip.TextColor3 = Color3.fromRGB(204, 204, 204)
+    skip.ZIndex = 5
+    skip.Parent = bg
+    local sc = Instance.new("UICorner")
+    sc.CornerRadius = UDim.new(0, 3)
+    sc.Parent = skip
+    local ss = Instance.new("UIStroke")
+    ss.Thickness = 1
+    ss.Color = Color3.fromRGB(34, 34, 34)
+    ss.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    ss.Parent = skip
+
+    skip.MouseEnter:Connect(function()
+        TweenService:Create(skip, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(75, 75, 75)}):Play()
+        ss.Color = BIRU
+    end)
+    skip.MouseLeave:Connect(function()
+        TweenService:Create(skip, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}):Play()
+        ss.Color = Color3.fromRGB(34, 34, 34)
+    end)
+
+    -- Fade in
+    local imgProp = (logo:IsA("ImageLabel")) and "ImageTransparency" or "TextTransparency"
+    TweenService:Create(logo, TweenInfo.new(0.6), {[imgProp] = 0}):Play()
+    TweenService:Create(lbl, TweenInfo.new(0.6), {TextTransparency = 0}):Play()
+
+    -- Animasi putar
+    local rot = 0
+    local conn = RunService.Heartbeat:Connect(function(dt)
+        rot = (rot + dt * 360) % 360
+        ringGrad.Rotation = rot
+    end)
+
+    local selesai = false
+    local function tutup()
+        if selesai then return end
+        selesai = true
+        local info = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+        TweenService:Create(bg, info, {BackgroundTransparency = 1}):Play()
+        TweenService:Create(logo, info, {[imgProp] = 1}):Play()
+        TweenService:Create(lbl, info, {TextTransparency = 1}):Play()
+        TweenService:Create(ringStroke, info, {Transparency = 1}):Play()
+        TweenService:Create(skip, info, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+        TweenService:Create(ss, info, {Transparency = 1}):Play()
+        task.delay(0.55, function()
+            if conn then conn:Disconnect() end
+            if gui then gui:Destroy() end
+        end)
+    end
+
+    skip.MouseButton1Click:Connect(tutup)
+
+    -- animasi titik "Loading..."
+    task.spawn(function()
+        local n = 0
+        while not selesai and gui.Parent do
+            n = n % 3 + 1
+            lbl.Text = "Loading" .. string.rep(".", n)
+            task.wait(0.4)
+        end
+    end)
+
+    task.delay(DURASI, tutup)
+end)
 
 -- ========================================================================
 -- BAGIAN 1: MAINBAR PLUS (hanya Rig)
@@ -46,17 +232,19 @@ task.spawn(function()
         table.clear(koneksiBar)
     end
 
-    -- ========== TEMA ==========
+    -- ========== TEMA ROBLOX STUDIO (DARK) ==========
     local T = {
-        bg = Color3.fromRGB(37, 37, 37),
-        panel = Color3.fromRGB(46, 46, 46),
-        panel2 = Color3.fromRGB(56, 56, 56),
-        hover = Color3.fromRGB(70, 70, 70),
-        border = Color3.fromRGB(26, 26, 26),
+        bg = Color3.fromRGB(46, 46, 46),
+        panel = Color3.fromRGB(37, 37, 37),
+        btn = Color3.fromRGB(60, 60, 60),
+        hover = Color3.fromRGB(75, 75, 75),
+        border = Color3.fromRGB(34, 34, 34),
         text = Color3.fromRGB(204, 204, 204),
-        muted = Color3.fromRGB(136, 136, 136),
-        aksen = Color3.fromRGB(11, 153, 255),
-        pending = Color3.fromRGB(255, 160, 40),
+        muted = Color3.fromRGB(150, 150, 150),
+        aksen = Color3.fromRGB(0, 162, 255),
+        selected = Color3.fromRGB(0, 90, 140),
+        pending = Color3.fromRGB(255, 170, 0),
+        pendingBg = Color3.fromRGB(95, 70, 20),
     }
 
     local FONT = Enum.Font.SourceSans
@@ -97,7 +285,7 @@ task.spawn(function()
     local function tween(obj, props, waktu)
         if not obj or not obj.Parent then return end
         pcall(function()
-            TweenService:Create(obj, TweenInfo.new(waktu or 0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
+            TweenService:Create(obj, TweenInfo.new(waktu or 0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), props):Play()
         end)
     end
 
@@ -126,17 +314,17 @@ task.spawn(function()
         Size = UDim2.new(0, 260, 0, 28),
         AnchorPoint = Vector2.new(0.5, 0),
         Position = UDim2.new(0.5, 0, 0, 12),
-        BackgroundColor3 = T.panel,
+        BackgroundColor3 = T.bg,
         BackgroundTransparency = 1,
         TextTransparency = 1,
         Text = "",
         TextColor3 = T.text,
-        Font = FONT_B,
+        Font = FONT,
         TextSize = 16,
         ZIndex = 50,
     }, ui)
-    sudut(toast, 5)
-    local toastStroke = garis(toast, 1, T.aksen)
+    sudut(toast, 3)
+    local toastStroke = garis(toast, 1, T.border)
     toastStroke.Transparency = 1
     local toastId = 0
     local function notif(teks)
@@ -196,26 +384,26 @@ task.spawn(function()
     local kursor = 0
     local JARAK = 4
 
-    -- ========== MAKEOVER TOMBOL BAWAAN ==========
+    -- ========== MAKEOVER TOMBOL BAWAAN (STYLE STUDIO) ==========
     local function gayaTombolAsli(b)
         if not (b:IsA("TextButton") or b:IsA("ImageButton")) then return end
         pcall(function()
-            b.BackgroundColor3 = T.panel2
+            b.AutoButtonColor = false
+            b.BackgroundColor3 = T.btn
             b.BackgroundTransparency = 0
+            b.BorderSizePixel = 0
             if b:IsA("TextButton") then
                 b.TextColor3 = T.text
-                b.Font = FONT_B
+                b.Font = FONT
             end
-            sudut(b, 5)
+            sudut(b, 3)
             local s = garis(b, 1, T.border)
-            local asli
             sambungBar(b.MouseEnter, function()
-                asli = b.BackgroundColor3
                 tween(b, {BackgroundColor3 = T.hover})
                 s.Color = T.aksen
             end)
             sambungBar(b.MouseLeave, function()
-                tween(b, {BackgroundColor3 = asli or T.panel2})
+                tween(b, {BackgroundColor3 = T.btn})
                 s.Color = T.border
             end)
         end)
@@ -225,9 +413,10 @@ task.spawn(function()
         pcall(function()
             mainBar.BackgroundColor3 = T.bg
             mainBar.BackgroundTransparency = 0
+            mainBar.BorderSizePixel = 0
             mainBar.ClipsDescendants = false
-            sudut(mainBar, 8)
-            garis(mainBar, 2, T.aksen)
+            sudut(mainBar, 4)
+            garis(mainBar, 1, T.border)
         end)
 
         for _, anak in ipairs(mainBar:GetChildren()) do
@@ -242,16 +431,18 @@ task.spawn(function()
                     pcall(function()
                         anak.BackgroundColor3 = T.panel
                         anak.BackgroundTransparency = 0
-                        sudut(anak, 5)
+                        anak.BorderSizePixel = 0
+                        sudut(anak, 3)
                         garis(anak, 1, T.border)
                         for _, x in ipairs(anak:GetChildren()) do
                             if x:IsA("TextBox") then
-                                x.BackgroundColor3 = T.bg
+                                x.BackgroundColor3 = T.panel
+                                x.BorderSizePixel = 0
                                 x.TextColor3 = T.text
                                 x.PlaceholderColor3 = T.muted
                                 x.Font = FONT
                                 sudut(x, 3)
-                                garis(x, 1, T.aksen)
+                                garis(x, 1, T.border)
                             elseif x:IsA("TextLabel") then
                                 x.TextColor3 = T.muted
                                 x.Font = FONT
@@ -273,20 +464,16 @@ task.spawn(function()
             Size = UDim2.fromOffset(sAcuan.X, sAcuan.Y),
             Position = UDim2.fromOffset(pos.X, pos.Y),
             AnchorPoint = Vector2.new(0, 0),
-            BackgroundColor3 = T.panel2,
+            BackgroundColor3 = T.btn,
+            BorderSizePixel = 0,
             AutoButtonColor = false,
             Text = "",
             ClipsDescendants = true,
             Visible = true,
             ZIndex = 10,
         }, mainBar)
-        sudut(b, 5)
+        sudut(b, 3)
         local s = garis(b, 1, T.border)
-
-        buat("UIGradient", {
-            Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(190, 190, 190)),
-            Rotation = 90,
-        }, b)
 
         local lblIkon = buat("TextLabel", {
             Name = "Ikon",
@@ -308,7 +495,7 @@ task.spawn(function()
             BackgroundTransparency = 1,
             Text = nilaiAwal,
             TextColor3 = T.muted,
-            Font = FONT_B,
+            Font = FONT,
             TextScaled = true,
             ZIndex = 11,
         }, b)
@@ -316,7 +503,7 @@ task.spawn(function()
 
         local indikator = buat("Frame", {
             Name = "Indikator",
-            Size = UDim2.new(0.7, 0, 0, 3),
+            Size = UDim2.new(0.7, 0, 0, 2),
             AnchorPoint = Vector2.new(0.5, 1),
             Position = UDim2.new(0.5, 0, 1, -2),
             BackgroundColor3 = T.aksen,
@@ -324,16 +511,17 @@ task.spawn(function()
             BorderSizePixel = 0,
             ZIndex = 11,
         }, b)
-        sudut(indikator, 2)
 
-        local warnaDasar = T.panel2
-        sambungBar(b.MouseEnter, function() s.Color = T.aksen end)
-        sambungBar(b.MouseLeave, function() s.Color = T.border end)
+        local warnaDasar = T.btn
+        sambungBar(b.MouseEnter, function()
+            s.Color = T.aksen
+            tween(b, {BackgroundColor3 = T.hover}, 0.08)
+        end)
+        sambungBar(b.MouseLeave, function()
+            s.Color = T.border
+            tween(b, {BackgroundColor3 = warnaDasar}, 0.08)
+        end)
         sambungBar(b.MouseButton1Click, function()
-            tween(b, {BackgroundColor3 = T.hover}, 0.06)
-            task.delay(0.07, function()
-                if b.Parent then tween(b, {BackgroundColor3 = warnaDasar}, 0.12) end
-            end)
             pcall(klik)
         end)
 
@@ -342,17 +530,17 @@ task.spawn(function()
             if not b.Parent then return end
             lblNilai.Text = nilai
             if status == "aktif" then
-                warnaDasar = Color3.fromRGB(28, 66, 98)
+                warnaDasar = T.selected
                 tween(indikator, {BackgroundTransparency = 0, BackgroundColor3 = T.aksen})
                 lblNilai.TextColor3 = Color3.new(1, 1, 1)
-                lblIkon.TextColor3 = T.aksen
+                lblIkon.TextColor3 = Color3.new(1, 1, 1)
             elseif status == "menunggu" then
-                warnaDasar = Color3.fromRGB(88, 62, 24)
+                warnaDasar = T.pendingBg
                 tween(indikator, {BackgroundTransparency = 0, BackgroundColor3 = T.pending})
                 lblNilai.TextColor3 = Color3.new(1, 1, 1)
                 lblIkon.TextColor3 = T.pending
             else
-                warnaDasar = T.panel2
+                warnaDasar = T.btn
                 tween(indikator, {BackgroundTransparency = 1})
                 lblNilai.TextColor3 = T.muted
                 lblIkon.TextColor3 = T.text
@@ -419,7 +607,6 @@ task.spawn(function()
         if sekarang and sekarang == rigPilihan then return end
 
         izinPlay = true
-        -- Kalau tidak ada karakter baru dalam 1.5 detik, terapkan ke karakter saat ini.
         task.delay(1.5, function()
             if izinPlay and aktif then
                 izinPlay = false
@@ -605,7 +792,6 @@ task.spawn(function()
     end)
 
     -- ========== SAAT KARAKTER SPAWN ==========
-    -- Rig HANYA diganti kalau tombol Play sudah ditekan (izinPlay = true).
     sambung(player.CharacterAdded, function(char)
         if izinPlay and not sedangGanti then
             izinPlay = false
@@ -641,8 +827,7 @@ task.spawn(function()
 end)
 
 -- ========================================================================
--- BAGIAN 2: COLORPALETTE REMAKE
--- (dijalankan di thread terpisah supaya tidak memblokir bagian 1)
+-- BAGIAN 2: COLORPALETTE REMAKE (tema Roblox Studio, tanpa DarkLayer)
 -- ========================================================================
 task.spawn(function()
     local Players = game:GetService("Players")
@@ -702,16 +887,16 @@ task.spawn(function()
     ---------------------------------------------------------------------
     local THEME = {
         bg = Color3.fromRGB(46, 46, 46),
-        panel = Color3.fromRGB(37, 37, 37),
-        input = Color3.fromRGB(30, 30, 30),
-        border = Color3.fromRGB(22, 22, 22),
-        border2 = Color3.fromRGB(72, 72, 72),
+        panel = Color3.fromRGB(46, 46, 46),
+        input = Color3.fromRGB(37, 37, 37),
+        border = Color3.fromRGB(34, 34, 34),
+        border2 = Color3.fromRGB(34, 34, 34),
         text = Color3.fromRGB(204, 204, 204),
-        textDim = Color3.fromRGB(140, 140, 140),
+        textDim = Color3.fromRGB(150, 150, 150),
         accent = Color3.fromRGB(0, 162, 255),
         accentHover = Color3.fromRGB(51, 184, 255),
-        btn = Color3.fromRGB(62, 62, 62),
-        btnHover = Color3.fromRGB(80, 80, 80),
+        btn = Color3.fromRGB(60, 60, 60),
+        btnHover = Color3.fromRGB(75, 75, 75),
     }
 
     local EXTRA_W = 250
@@ -738,9 +923,9 @@ task.spawn(function()
     local undoStack, redoStack = {}, {}
     local lastSnap = 0
 
-    local TWEEN_FAST = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local TWEEN_MED = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local TWEEN_POP = TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+    local TWEEN_FAST = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local TWEEN_MED = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local TWEEN_POP = TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
     local activeTweens = {}
     local function tween(obj, info, props, key)
@@ -849,7 +1034,7 @@ task.spawn(function()
         colorPalette.ImageTransparency = 1
     end
     if not colorPalette:FindFirstChildOfClass("UICorner") then addCorner(colorPalette, 4) end
-    if not colorPalette:FindFirstChildOfClass("UIStroke") then addStroke(colorPalette, THEME.border, 2, 0) end
+    if not colorPalette:FindFirstChildOfClass("UIStroke") then addStroke(colorPalette, THEME.border, 1, 0) end
 
     if clickBlocker and clickBlocker:IsA("GuiObject") then
         clickBlocker.Active = true
@@ -868,14 +1053,14 @@ task.spawn(function()
         if gui and gui:IsA("GuiObject") then
             if not gui:FindFirstChildOfClass("UICorner") then addCorner(gui, 3) end
             if not gui:FindFirstChildOfClass("UIStroke") then
-                addStroke(gui, strokeColor or THEME.border, 1.5, 0)
+                addStroke(gui, strokeColor or THEME.border, 1, 0)
             end
         end
     end
 
-    studioBox(palette, THEME.border2)
-    studioBox(darkness, THEME.border2)
-    studioBox(selectedColorFrame, THEME.border2)
+    studioBox(palette, THEME.border)
+    studioBox(darkness, THEME.border)
+    studioBox(selectedColorFrame, THEME.border)
 
     local function styleActionButton(btn, baseColor, hoverColor, textColor)
         if not btn or not btn:IsA("GuiButton") then return end
@@ -885,7 +1070,7 @@ task.spawn(function()
         btn.BorderSizePixel = 0
         if btn:IsA("TextButton") then
             btn.TextColor3 = textColor
-            btn.Font = Enum.Font.SourceSansBold
+            btn.Font = Enum.Font.SourceSans
         end
         studioBox(btn, THEME.border)
         btn.MouseEnter:Connect(function()
@@ -899,9 +1084,8 @@ task.spawn(function()
     styleActionButton(cancelButton, THEME.btn, THEME.btnHover, THEME.text)
 
     ---------------------------------------------------------------------
-    -- Palette tengah: Hue (X) + Saturasi (Y) + overlay hitam (Darkness)
+    -- Palette tengah: Hue (X) + Saturasi (Y)  (tanpa DarkLayer)
     ---------------------------------------------------------------------
-    local darkOverlay
     local paletteZ = 1
 
     if palette and palette:IsA("GuiObject") then
@@ -957,10 +1141,6 @@ task.spawn(function()
             NumberSequenceKeypoint.new(1, 0),
         })
         sg.Parent = satLayer
-
-        darkOverlay = layer("DarkLayer", 6)
-        darkOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
-        darkOverlay.BackgroundTransparency = val
     end
 
     if crosshair and crosshair:IsA("GuiObject") then
@@ -1020,14 +1200,14 @@ task.spawn(function()
         darkMarker = Instance.new("Frame")
         darkMarker.Name = "DarkMarker"
         darkMarker.AnchorPoint = Vector2.new(0.5, 0.5)
-        darkMarker.Size = UDim2.new(1, 0, 0, 5)
+        darkMarker.Size = UDim2.new(1, 0, 0, 4)
         darkMarker.Position = UDim2.new(0.5, 0, 1 - val, 0)
         darkMarker.BackgroundColor3 = Color3.new(1, 1, 1)
         darkMarker.BorderSizePixel = 0
         darkMarker.ZIndex = darkness.ZIndex + 3
         darkMarker.Active = false
         darkMarker.Parent = bar
-        addStroke(darkMarker, Color3.new(0, 0, 0), 1.5, 0)
+        addStroke(darkMarker, Color3.new(0, 0, 0), 1, 0)
     end
 
     ---------------------------------------------------------------------
@@ -1071,13 +1251,13 @@ task.spawn(function()
     extras.Position = UDim2.new(1, 8, 0, 0)
     extras.Size = UDim2.new(0, EXTRA_W, 1, 0)
     extras.ScrollBarThickness = 4
-    extras.ScrollBarImageColor3 = THEME.border2
+    extras.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 90)
     extras.CanvasSize = UDim2.new()
     extras.AutomaticCanvasSize = Enum.AutomaticSize.Y
     extras.ScrollingDirection = Enum.ScrollingDirection.Y
     extras.Parent = colorPalette
     addCorner(extras, 4)
-    addStroke(extras, THEME.border, 2, 0)
+    addStroke(extras, THEME.border, 1, 0)
 
     local pad = Instance.new("UIPadding")
     pad.PaddingTop = UDim.new(0, 8)
@@ -1111,7 +1291,7 @@ task.spawn(function()
         l.BackgroundTransparency = 1
         l.Size = UDim2.new(1, 0, 0, 14)
         l.LayoutOrder = nextOrder()
-        l.Font = Enum.Font.SourceSansBold
+        l.Font = Enum.Font.SourceSansSemibold
         l.TextSize = 13
         l.TextColor3 = THEME.textDim
         l.TextXAlignment = Enum.TextXAlignment.Left
@@ -1157,12 +1337,12 @@ task.spawn(function()
         t.ClearTextOnFocus = false
         t.Parent = parent
         addCorner(t, 3)
-        local st = addStroke(t, THEME.border2, 1, 0)
+        local st = addStroke(t, THEME.border, 1, 0)
         t.Focused:Connect(function()
             tween(st, TWEEN_FAST, { Color = THEME.accent }, st)
         end)
         t.FocusLost:Connect(function()
-            tween(st, TWEEN_FAST, { Color = THEME.border2 }, st)
+            tween(st, TWEEN_FAST, { Color = THEME.border }, st)
         end)
         return t, st
     end
@@ -1204,12 +1384,12 @@ task.spawn(function()
             s.BorderSizePixel = 0
             s.Parent = f
             addCorner(s, 3)
-            local st = addStroke(s, THEME.border2, 1, 0)
+            local st = addStroke(s, THEME.border, 1, 0)
             s.MouseEnter:Connect(function()
-                tween(st, TWEEN_FAST, { Color = THEME.accent, Thickness = 2 }, st)
+                tween(st, TWEEN_FAST, { Color = THEME.accent }, st)
             end)
             s.MouseLeave:Connect(function()
-                tween(st, TWEEN_FAST, { Color = THEME.border2, Thickness = 1 }, st)
+                tween(st, TWEEN_FAST, { Color = THEME.border }, st)
             end)
             list[i] = s
         end
@@ -1221,7 +1401,7 @@ task.spawn(function()
     section("Hex")
     local hexRow = row(28)
     local hexBox, hexStroke = makeBox(hexRow, "#A3A2A5", "#RRGGBB")
-    hexBox.Font = Enum.Font.SourceSansBold
+    hexBox.Font = Enum.Font.SourceSansSemibold
     hexBox.Size = UDim2.new(1, -76, 1, 0)
     local randomBtn = makeButton(hexRow, "Random", 0)
     randomBtn.AnchorPoint = Vector2.new(1, 0)
@@ -1230,7 +1410,6 @@ task.spawn(function()
     randomBtn.BackgroundColor3 = THEME.accent
     randomBtn:SetAttribute("BaseColor", THEME.accent)
     randomBtn.TextColor3 = Color3.new(1, 1, 1)
-    randomBtn.Font = Enum.Font.SourceSansBold
 
     section("RGB")
     local rgbRow = gridRow(26, 3)
@@ -1254,7 +1433,7 @@ task.spawn(function()
     preview.BorderSizePixel = 0
     preview.Parent = previewRow
     addCorner(preview, 3)
-    addStroke(preview, THEME.border2, 1, 0)
+    addStroke(preview, THEME.border, 1, 0)
 
     local function previewLabel(text, x, w, color)
         local l = Instance.new("TextLabel")
@@ -1412,7 +1591,6 @@ task.spawn(function()
         if not sBox:IsFocused() then sBox.Text = tostring(math.round(sat * 100)) end
         if not vBox:IsFocused() then vBox.Text = tostring(math.round(val * 100)) end
         if not hexBox:IsFocused() then hexBox.Text = "#" .. currentColor:ToHex():upper() end
-        tween(hexStroke, TWEEN_MED, { Color = currentColor }, "hexStrokeColor")
 
         preview.BackgroundColor3 = currentColor
         local rw = contrast(currentColor, Color3.new(1, 1, 1))
@@ -1451,9 +1629,6 @@ task.spawn(function()
         currentColor = Color3.fromHSV(hue, sat, val)
         local r, g, b = to255(currentColor)
 
-        if darkOverlay then
-            darkOverlay.BackgroundTransparency = val
-        end
         if darkGradient then
             darkGradient.Color = ColorSequence.new(Color3.fromHSV(hue, sat, 1), Color3.new(0, 0, 0))
         end
