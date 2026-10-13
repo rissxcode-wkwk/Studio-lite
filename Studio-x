@@ -1,42 +1,25 @@
 -- MainBar Plus + ColorPalette Remake
--- Fitur langsung di tombol MainBar (Rig, Reset, Fly, Noclip, Speed, Jump, Terang)
--- Rig R6/R15: pilih dulu lewat tombol Rig, rig baru berubah setelah tombol PLAY di MainBar ditekan
--- FIX: tombol tidak hilang lagi saat respawn/Play (MainBar dibuat ulang oleh game -> tombol dipasang ulang otomatis)
--- Catatan: Roblox tidak bisa render SVG, jadi ikon memakai glyph/emoji
+-- MainBar: hanya makeover tampilan (semua fitur tambahan & rig/dummy dihapus)
+-- Catatan: Roblox tidak bisa render SVG
 
 -- ========================================================================
--- BAGIAN 1: MAINBAR PLUS (dijalankan di thread terpisah)
+-- BAGIAN 1: MAINBAR MAKEOVER
 -- ========================================================================
 task.spawn(function()
-    -- ========== LAYANAN ==========
     local Players = game:GetService("Players")
     local TweenService = game:GetService("TweenService")
-    local UserInputService = game:GetService("UserInputService")
-    local RunService = game:GetService("RunService")
-    local Lighting = game:GetService("Lighting")
-    local Workspace = game:GetService("Workspace")
 
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
 
-    -- ========== BERSIHKAN VERSI LAMA ==========
     local genv = (getgenv and getgenv()) or _G
     if genv.StudioPlusBersih then
         pcall(genv.StudioPlusBersih)
     end
-    local uiLama = playerGui:FindFirstChild("StudioPlusUI")
-    if uiLama then uiLama:Destroy() end
 
     local aktif = true
-    local koneksi = {}      -- koneksi global (bertahan selama script hidup)
-    local koneksiBar = {}   -- koneksi khusus MainBar yang sedang dipakai
-
-    local function sambung(sinyal, fn)
-        if not sinyal then return nil end
-        local c = sinyal:Connect(fn)
-        table.insert(koneksi, c)
-        return c
-    end
+    local koneksiBar = {}
+    local mainBar = nil
 
     local function sambungBar(sinyal, fn)
         if not sinyal then return nil end
@@ -52,7 +35,6 @@ task.spawn(function()
         table.clear(koneksiBar)
     end
 
-    -- ========== TEMA (GAYA ROBLOX STUDIO) ==========
     local T = {
         bg = Color3.fromRGB(37, 37, 37),
         panel = Color3.fromRGB(46, 46, 46),
@@ -62,21 +44,10 @@ task.spawn(function()
         text = Color3.fromRGB(204, 204, 204),
         muted = Color3.fromRGB(136, 136, 136),
         aksen = Color3.fromRGB(11, 153, 255),
-        pending = Color3.fromRGB(255, 160, 40),
     }
 
     local FONT = Enum.Font.SourceSans
     local FONT_B = Enum.Font.SourceSansSemibold
-
-    -- ========== HELPER ==========
-    local function buat(kelas, props, induk)
-        local o = Instance.new(kelas)
-        for k, v in pairs(props or {}) do
-            o[k] = v
-        end
-        if induk then o.Parent = induk end
-        return o
-    end
 
     local function garis(obj, tebal, warna)
         local s = obj:FindFirstChildOfClass("UIStroke")
@@ -107,7 +78,6 @@ task.spawn(function()
         end)
     end
 
-    -- ========== CARI MAINBAR ==========
     local function cariMainBar()
         local g = playerGui:FindFirstChild("StudioGui")
         local m = g and g:FindFirstChild("MainBar")
@@ -120,88 +90,6 @@ task.spawn(function()
         return nil
     end
 
-    -- ========== LAYER NOTIFIKASI KECIL (TOAST) ==========
-    local ui = buat("ScreenGui", {
-        Name = "StudioPlusUI",
-        ResetOnSpawn = false,
-        DisplayOrder = 999,
-        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-    }, playerGui)
-
-    local toast = buat("TextLabel", {
-        Size = UDim2.new(0, 260, 0, 28),
-        AnchorPoint = Vector2.new(0.5, 0),
-        Position = UDim2.new(0.5, 0, 0, 12),
-        BackgroundColor3 = T.panel,
-        BackgroundTransparency = 1,
-        TextTransparency = 1,
-        Text = "",
-        TextColor3 = T.text,
-        Font = FONT_B,
-        TextSize = 16,
-        ZIndex = 50,
-    }, ui)
-    sudut(toast, 5)
-    local toastStroke = garis(toast, 1, T.aksen)
-    toastStroke.Transparency = 1
-    local toastId = 0
-    local function notif(teks)
-        toastId += 1
-        local id = toastId
-        toast.Text = teks
-        tween(toast, {BackgroundTransparency = 0, TextTransparency = 0}, 0.15)
-        tween(toastStroke, {Transparency = 0}, 0.15)
-        task.delay(2, function()
-            if id == toastId and toast.Parent then
-                tween(toast, {BackgroundTransparency = 1, TextTransparency = 1}, 0.25)
-                tween(toastStroke, {Transparency = 1}, 0.25)
-            end
-        end)
-    end
-
-    -- ========== STATE FITUR ==========
-    local R6 = Enum.HumanoidRigType.R6
-    local R15 = Enum.HumanoidRigType.R15
-
-    local function ambilKarakter()
-        local char = player.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        return char, hum, hrp
-    end
-
-    local rigPilihan = R15
-    do
-        local _, hum = ambilKarakter()
-        if hum then rigPilihan = hum.RigType end
-    end
-    local sedangGanti = false
-    local izinPlay = false -- true setelah tombol Play ditekan
-
-    local flyAktif, flyKec = false, 60
-    local bv, bg
-    local noclipAktif = false
-    local daftarSpeed = {false, 32, 50, 80, 120}
-    local idxSpeed = 1
-    local kecJalan = nil
-    local lompatTakTerbatas = false
-    local lightAsli
-    local terangAktif = false
-
-    -- handle tombol (diisi ulang setiap MainBar dibangun)
-    local tombolRig, tombolReset, tombolFly, tombolNoclip, tombolSpeed, tombolJump, tombolTerang
-    local tombolPlay = nil
-
-    -- ========== STATE MAINBAR ==========
-    local mainBar = nil
-    local ukuranAsliBar = nil
-    local absAsli = Vector2.new(0, 0)
-    local tombolBaru = {}
-    local sumbuX, pAcuan, sAcuan = true, Vector2.new(0, 0), Vector2.new(40, 40)
-    local kursor = 0
-    local JARAK = 4
-
-    -- ========== MAKEOVER TOMBOL BAWAAN ==========
     local function gayaTombolAsli(b)
         if not (b:IsA("TextButton") or b:IsA("ImageButton")) then return end
         pcall(function()
@@ -236,437 +124,46 @@ task.spawn(function()
         end)
 
         for _, anak in ipairs(mainBar:GetChildren()) do
-            if string.sub(anak.Name, 1, 3) ~= "SP_" then
-                if anak:IsA("TextButton") or anak:IsA("ImageButton") then
-                    gayaTombolAsli(anak)
-                elseif anak.Name == "sel" then
-                    for _, t in ipairs(anak:GetChildren()) do
-                        gayaTombolAsli(t)
-                    end
-                elseif anak.Name == "Snap" then
-                    pcall(function()
-                        anak.BackgroundColor3 = T.panel
-                        anak.BackgroundTransparency = 0
-                        sudut(anak, 5)
-                        garis(anak, 1, T.border)
-                        for _, x in ipairs(anak:GetChildren()) do
-                            if x:IsA("TextBox") then
-                                x.BackgroundColor3 = T.bg
-                                x.TextColor3 = T.text
-                                x.PlaceholderColor3 = T.muted
-                                x.Font = FONT
-                                sudut(x, 3)
-                                garis(x, 1, T.aksen)
-                            elseif x:IsA("TextLabel") then
-                                x.TextColor3 = T.muted
-                                x.Font = FONT
-                            end
+            if anak:IsA("TextButton") or anak:IsA("ImageButton") then
+                gayaTombolAsli(anak)
+            elseif anak.Name == "sel" then
+                for _, t in ipairs(anak:GetChildren()) do
+                    gayaTombolAsli(t)
+                end
+            elseif anak.Name == "Snap" then
+                pcall(function()
+                    anak.BackgroundColor3 = T.panel
+                    anak.BackgroundTransparency = 0
+                    sudut(anak, 5)
+                    garis(anak, 1, T.border)
+                    for _, x in ipairs(anak:GetChildren()) do
+                        if x:IsA("TextBox") then
+                            x.BackgroundColor3 = T.bg
+                            x.TextColor3 = T.text
+                            x.PlaceholderColor3 = T.muted
+                            x.Font = FONT
+                            sudut(x, 3)
+                            garis(x, 1, T.aksen)
+                        elseif x:IsA("TextLabel") then
+                            x.TextColor3 = T.muted
+                            x.Font = FONT
                         end
-                    end)
-                end
+                    end
+                end)
             end
         end
     end
 
-    -- ========== PEMBUAT TOMBOL BARU (IKON + TEKS + INDIKATOR) ==========
-    local function buatTombol(judul, ikon, nilaiAwal, klik)
-        local pos = sumbuX and Vector2.new(kursor, pAcuan.Y) or Vector2.new(pAcuan.X, kursor)
-        kursor = kursor + (sumbuX and sAcuan.X or sAcuan.Y) + JARAK
-
-        local b = buat("TextButton", {
-            Name = "SP_" .. judul,
-            Size = UDim2.fromOffset(sAcuan.X, sAcuan.Y),
-            Position = UDim2.fromOffset(pos.X, pos.Y),
-            AnchorPoint = Vector2.new(0, 0),
-            BackgroundColor3 = T.panel2,
-            AutoButtonColor = false,
-            Text = "",
-            ClipsDescendants = true,
-            Visible = true,
-            ZIndex = 10,
-        }, mainBar)
-        sudut(b, 5)
-        local s = garis(b, 1, T.border)
-
-        buat("UIGradient", {
-            Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(190, 190, 190)),
-            Rotation = 90,
-        }, b)
-
-        local lblIkon = buat("TextLabel", {
-            Name = "Ikon",
-            Size = UDim2.new(1, 0, 0.58, 0),
-            Position = UDim2.new(0, 0, 0.04, 0),
-            BackgroundTransparency = 1,
-            Text = ikon,
-            TextColor3 = T.text,
-            Font = Enum.Font.SourceSansBold,
-            TextScaled = true,
-            ZIndex = 11,
-        }, b)
-        buat("UITextSizeConstraint", {MaxTextSize = 24, MinTextSize = 10}, lblIkon)
-
-        local lblNilai = buat("TextLabel", {
-            Name = "Nilai",
-            Size = UDim2.new(1, -4, 0.30, 0),
-            Position = UDim2.new(0, 2, 0.62, 0),
-            BackgroundTransparency = 1,
-            Text = nilaiAwal,
-            TextColor3 = T.muted,
-            Font = FONT_B,
-            TextScaled = true,
-            ZIndex = 11,
-        }, b)
-        buat("UITextSizeConstraint", {MaxTextSize = 14, MinTextSize = 7}, lblNilai)
-
-        local indikator = buat("Frame", {
-            Name = "Indikator",
-            Size = UDim2.new(0.7, 0, 0, 3),
-            AnchorPoint = Vector2.new(0.5, 1),
-            Position = UDim2.new(0.5, 0, 1, -2),
-            BackgroundColor3 = T.aksen,
-            BackgroundTransparency = 1,
-            BorderSizePixel = 0,
-            ZIndex = 11,
-        }, b)
-        sudut(indikator, 2)
-
-        local warnaDasar = T.panel2
-        sambungBar(b.MouseEnter, function() s.Color = T.aksen end)
-        sambungBar(b.MouseLeave, function() s.Color = T.border end)
-        sambungBar(b.MouseButton1Click, function()
-            tween(b, {BackgroundColor3 = T.hover}, 0.06)
-            task.delay(0.07, function()
-                if b.Parent then tween(b, {BackgroundColor3 = warnaDasar}, 0.12) end
-            end)
-            pcall(klik)
-        end)
-
-        local obj = {}
-        -- status: "aktif" / "menunggu" / nil
-        function obj.set(nilai, status)
-            if not b.Parent then return end
-            lblNilai.Text = nilai
-            if status == "aktif" then
-                warnaDasar = Color3.fromRGB(28, 66, 98)
-                tween(indikator, {BackgroundTransparency = 0, BackgroundColor3 = T.aksen})
-                lblNilai.TextColor3 = Color3.new(1, 1, 1)
-                lblIkon.TextColor3 = T.aksen
-            elseif status == "menunggu" then
-                warnaDasar = Color3.fromRGB(88, 62, 24)
-                tween(indikator, {BackgroundTransparency = 0, BackgroundColor3 = T.pending})
-                lblNilai.TextColor3 = Color3.new(1, 1, 1)
-                lblIkon.TextColor3 = T.pending
-            else
-                warnaDasar = T.panel2
-                tween(indikator, {BackgroundTransparency = 1})
-                lblNilai.TextColor3 = T.muted
-                lblIkon.TextColor3 = T.text
-            end
-            tween(b, {BackgroundColor3 = warnaDasar})
-        end
-        table.insert(tombolBaru, b)
-        return obj
-    end
-
-    -- ========== FITUR: RIG ==========
-    local function perbaruiTombolRig()
-        if not tombolRig then return end
-        local _, hum = ambilKarakter()
-        local namaPilih = (rigPilihan == R6) and "R6" or "R15"
-        local sekarang = hum and ((hum.RigType == R6) and "R6" or "R15") or nil
-        if sekarang and sekarang ~= namaPilih then
-            tombolRig.set("▶ " .. namaPilih, "menunggu")
-        else
-            tombolRig.set(namaPilih, "aktif")
-        end
-    end
-
-    local function terapkanRig(char)
-        if not char or not char.Parent then return end
-        local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
-        if not hum then return end
-        if hum.RigType == rigPilihan or sedangGanti then
-            perbaruiTombolRig()
-            return
-        end
-        sedangGanti = true
-        task.spawn(function()
-            local hrp = char:FindFirstChild("HumanoidRootPart") or char:WaitForChild("HumanoidRootPart", 5)
-            local cf = hrp and hrp.CFrame or CFrame.new(0, 10, 0)
-            local ok, err = pcall(function()
-                local desc = Players:GetHumanoidDescriptionFromUserId(player.UserId)
-                local model = Players:CreateHumanoidModelFromDescription(desc, rigPilihan)
-                model.Name = player.Name
-                player.Character = model
-                model.Parent = Workspace
-                model:PivotTo(cf)
-                if char and char.Parent then char:Destroy() end
-                local hBaru = model:WaitForChild("Humanoid", 5)
-                local cam = Workspace.CurrentCamera
-                if hBaru and cam then cam.CameraSubject = hBaru end
-            end)
-            if ok then
-                notif("Rig diganti ke " .. ((rigPilihan == R6) and "R6" or "R15"))
-            else
-                warn("[StudioPlus] Gagal ganti rig:", err)
-                notif("Gagal ganti rig")
-            end
-            sedangGanti = false
-            task.wait(0.3)
-            perbaruiTombolRig()
-        end)
-    end
-
-    local function saatPlayDitekan()
-        local _, hum = ambilKarakter()
-        local sekarang = hum and hum.RigType or nil
-        if sekarang and sekarang == rigPilihan then return end
-
-        izinPlay = true
-        -- Play biasanya me-respawn karakter -> diterapkan di CharacterAdded.
-        -- Kalau tidak ada karakter baru dalam 1.5 detik, terapkan ke karakter saat ini.
-        task.delay(1.5, function()
-            if izinPlay and aktif then
-                izinPlay = false
-                local char = player.Character
-                if char then terapkanRig(char) end
-            end
-        end)
-    end
-
-    local function cariTombolPlay()
-        local p = mainBar:FindFirstChild("play", true)
-        if p and p:IsA("GuiButton") then return p end
-        for _, d in ipairs(mainBar:GetDescendants()) do
-            if d:IsA("GuiButton") and string.lower(d.Name) == "play" then
-                return d
-            end
-        end
-        return nil
-    end
-
-    -- ========== FITUR: FLY ==========
-    local function setFly(on)
-        flyAktif = on
-        local _, hum, hrp = ambilKarakter()
-        if bv then bv:Destroy() bv = nil end
-        if bg then bg:Destroy() bg = nil end
-        if on and hrp and hum then
-            bv = buat("BodyVelocity", {MaxForce = Vector3.new(1e9, 1e9, 1e9), Velocity = Vector3.zero}, hrp)
-            bg = buat("BodyGyro", {MaxTorque = Vector3.new(1e9, 1e9, 1e9), P = 1e4, CFrame = hrp.CFrame}, hrp)
-            hum.PlatformStand = true
-        elseif hum then
-            hum.PlatformStand = false
-        end
-        if tombolFly then tombolFly.set(on and "ON" or "OFF", on and "aktif" or nil) end
-    end
-
-    -- ========== FITUR: TERANG ==========
-    local function setTerang(on)
-        terangAktif = on
-        if on then
-            if not lightAsli then
-                lightAsli = {
-                    Brightness = Lighting.Brightness,
-                    ClockTime = Lighting.ClockTime,
-                    FogEnd = Lighting.FogEnd,
-                    GlobalShadows = Lighting.GlobalShadows,
-                    Ambient = Lighting.Ambient,
-                    OutdoorAmbient = Lighting.OutdoorAmbient,
-                }
-            end
-            Lighting.Brightness = 2
-            Lighting.ClockTime = 14
-            Lighting.FogEnd = 1e6
-            Lighting.GlobalShadows = false
-            Lighting.Ambient = Color3.new(1, 1, 1)
-            Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-        elseif lightAsli then
-            for k, v in pairs(lightAsli) do Lighting[k] = v end
-            lightAsli = nil
-        end
-        if tombolTerang then tombolTerang.set(on and "ON" or "OFF", on and "aktif" or nil) end
-    end
-
-    -- ========== SEGARKAN TAMPILAN SEMUA TOMBOL DARI STATE ==========
-    local function segarkanStatus()
-        perbaruiTombolRig()
-        if tombolFly then tombolFly.set(flyAktif and "ON" or "OFF", flyAktif and "aktif" or nil) end
-        if tombolNoclip then tombolNoclip.set(noclipAktif and "ON" or "OFF", noclipAktif and "aktif" or nil) end
-        if tombolSpeed then
-            local v = daftarSpeed[idxSpeed]
-            tombolSpeed.set(v and tostring(v) or "Normal", v and "aktif" or nil)
-        end
-        if tombolJump then tombolJump.set(lompatTakTerbatas and "ON" or "OFF", lompatTakTerbatas and "aktif" or nil) end
-        if tombolTerang then tombolTerang.set(terangAktif and "ON" or "OFF", terangAktif and "aktif" or nil) end
-    end
-
-    -- ========== BANGUN SEMUA TOMBOL BARU DI MAINBAR ==========
-    local function bangunTombol()
-        if not mainBar or not mainBar.Parent then return end
-
-        -- hapus tombol lama (kalau masih ada) lalu kembalikan ukuran bar
-        for _, b in ipairs(tombolBaru) do
-            pcall(function() b:Destroy() end)
-        end
-        table.clear(tombolBaru)
-        if ukuranAsliBar then
-            pcall(function() mainBar.Size = ukuranAsliBar end)
-        end
-        task.wait()
-
-        -- tombol bawaan sebagai acuan posisi
-        local daftarAsli = {}
-        for _, n in ipairs({"select", "move", "scale", "rotate", "play", "toolbox", "partsel", "Snap"}) do
-            local c = mainBar:FindFirstChild(n)
-            if c and c:IsA("GuiObject") then
-                table.insert(daftarAsli, c)
-            end
-        end
-        if #daftarAsli == 0 then
-            for _, c in ipairs(mainBar:GetChildren()) do
-                if c:IsA("GuiObject") and string.sub(c.Name, 1, 3) ~= "SP_" then
-                    table.insert(daftarAsli, c)
-                end
-            end
-        end
-        if #daftarAsli == 0 then
-            warn("[StudioPlus] Tidak ada tombol di MainBar sebagai acuan.")
-            return
-        end
-
-        local function posLokal(c)
-            if mainBar.Rotation == 0 then
-                return c.AbsolutePosition - mainBar.AbsolutePosition
-            end
-            local ps = mainBar.AbsoluteSize
-            return Vector2.new(
-                c.Position.X.Scale * ps.X + c.Position.X.Offset - c.AnchorPoint.X * c.AbsoluteSize.X,
-                c.Position.Y.Scale * ps.Y + c.Position.Y.Offset - c.AnchorPoint.Y * c.AbsoluteSize.Y
-            )
-        end
-
-        local minX, maxX, minY, maxY = math.huge, -math.huge, math.huge, -math.huge
-        for _, c in ipairs(daftarAsli) do
-            local p = posLokal(c)
-            minX, maxX = math.min(minX, p.X), math.max(maxX, p.X)
-            minY, maxY = math.min(minY, p.Y), math.max(maxY, p.Y)
-        end
-
-        sumbuX = (maxX - minX) >= (maxY - minY)
-
-        local ujung = 0
-        for _, c in ipairs(daftarAsli) do
-            local p = posLokal(c)
-            local akhir = sumbuX and (p.X + c.AbsoluteSize.X) or (p.Y + c.AbsoluteSize.Y)
-            ujung = math.max(ujung, akhir)
-        end
-
-        local acuan = mainBar:FindFirstChild("select") or daftarAsli[1]
-        pAcuan = posLokal(acuan)
-        sAcuan = acuan.AbsoluteSize
-        if sAcuan.X <= 0 or sAcuan.Y <= 0 then
-            sAcuan = Vector2.new(40, 40)
-        end
-        kursor = ujung + JARAK
-
-        -- ---- Rig ----
-        tombolRig = buatTombol("Rig", "☺", (rigPilihan == R6) and "R6" or "R15", function()
-            rigPilihan = (rigPilihan == R6) and R15 or R6
-            perbaruiTombolRig()
-            notif("Rig dipilih: " .. ((rigPilihan == R6) and "R6" or "R15") .. " - tekan Play untuk menerapkan")
-        end)
-
-        -- ---- Reset ----
-        tombolReset = buatTombol("Reset", "⟲", "Respawn", function()
-            if not tombolPlay then izinPlay = true end
-            local _, hum = ambilKarakter()
-            if hum then hum.Health = 0 end
-            notif("Respawn...")
-        end)
-
-        -- ---- Fly ----
-        tombolFly = buatTombol("Fly", "✈", "OFF", function()
-            setFly(not flyAktif)
-            notif(flyAktif and "Fly aktif" or "Fly mati")
-        end)
-
-        -- ---- Noclip ----
-        tombolNoclip = buatTombol("Noclip", "◌", "OFF", function()
-            noclipAktif = not noclipAktif
-            tombolNoclip.set(noclipAktif and "ON" or "OFF", noclipAktif and "aktif" or nil)
-            notif(noclipAktif and "Noclip aktif" or "Noclip mati")
-        end)
-
-        -- ---- Speed ----
-        tombolSpeed = buatTombol("Speed", "⚡", "Normal", function()
-            idxSpeed = idxSpeed % #daftarSpeed + 1
-            local v = daftarSpeed[idxSpeed]
-            kecJalan = v or nil
-            local _, hum = ambilKarakter()
-            if hum and not v then hum.WalkSpeed = 16 end
-            tombolSpeed.set(v and tostring(v) or "Normal", v and "aktif" or nil)
-            notif("Speed: " .. (v and tostring(v) or "Normal"))
-        end)
-
-        -- ---- Jump ----
-        tombolJump = buatTombol("Jump", "⇧", "OFF", function()
-            lompatTakTerbatas = not lompatTakTerbatas
-            tombolJump.set(lompatTakTerbatas and "ON" or "OFF", lompatTakTerbatas and "aktif" or nil)
-            notif(lompatTakTerbatas and "Infinite Jump aktif" or "Infinite Jump mati")
-        end)
-
-        -- ---- Terang ----
-        tombolTerang = buatTombol("Terang", "☀", "OFF", function()
-            setTerang(not terangAktif)
-            notif(terangAktif and "Terang aktif" or "Terang mati")
-        end)
-
-        -- perpanjang MainBar jika tombol melebihi ukuran asli
-        local saatIni = sumbuX and absAsli.X or absAsli.Y
-        if kursor > saatIni then
-            local tambah = kursor - saatIni + JARAK
-            local S = ukuranAsliBar or mainBar.Size
-            if sumbuX then
-                mainBar.Size = UDim2.new(S.X.Scale, S.X.Offset + tambah, S.Y.Scale, S.Y.Offset)
-            else
-                mainBar.Size = UDim2.new(S.X.Scale, S.X.Offset, S.Y.Scale, S.Y.Offset + tambah)
-            end
-        end
-
-        segarkanStatus()
-    end
-
-    -- ========== PASANG KE MAINBAR (DIPANGGIL SETIAP MAINBAR BARU MUNCUL) ==========
     local function pasang(bar)
         putusBar()
         mainBar = bar
-        ukuranAsliBar = bar.Size
-        absAsli = bar.AbsoluteSize
-        table.clear(tombolBaru)
-
-        -- cegah game membuat ulang GUI saat karakter respawn
         pcall(function()
             local sg = bar:FindFirstAncestorOfClass("ScreenGui")
             if sg then sg.ResetOnSpawn = false end
         end)
-
         makeoverMainBar()
-
-        -- hubungkan ke tombol PLAY bawaan
-        tombolPlay = cariTombolPlay()
-        if tombolPlay then
-            sambungBar(tombolPlay.MouseButton1Click, saatPlayDitekan)
-            sambungBar(tombolPlay.Activated, saatPlayDitekan)
-        else
-            warn("[StudioPlus] Tombol 'play' tidak ditemukan, rig akan diterapkan lewat tombol Reset.")
-        end
-
-        bangunTombol()
     end
 
-    -- ========== TUNGGU MAINBAR LALU PASANG ==========
     do
         local bar = cariMainBar()
         local t0 = os.clock()
@@ -676,123 +173,28 @@ task.spawn(function()
         end
         if not bar then
             warn("[StudioPlus] MainBar tidak ditemukan di PlayerGui.")
-            ui:Destroy()
             return
         end
         task.wait(0.2)
         pasang(bar)
     end
 
-    -- ========== PENJAGA: PASANG ULANG JIKA TOMBOL HILANG ==========
     task.spawn(function()
         while aktif do
-            task.wait(0.4)
+            task.wait(0.5)
             if not aktif then break end
-
             local bar = cariMainBar()
             if bar and bar ~= mainBar then
-                -- MainBar diganti/dibuat ulang oleh game
                 task.wait(0.25)
                 if aktif then pasang(bar) end
-            elseif mainBar and mainBar.Parent then
-                local perlu = (#tombolBaru < 7)
-                if not perlu then
-                    for _, b in ipairs(tombolBaru) do
-                        if (not b) or b.Parent ~= mainBar then
-                            perlu = true
-                            break
-                        end
-                        if not b.Visible then b.Visible = true end
-                    end
-                end
-                if perlu then
-                    bangunTombol()
-                end
             end
         end
     end)
 
-    -- ========== LOOP UTAMA ==========
-    sambung(RunService.Heartbeat, function()
-        local _, hum, hrp = ambilKarakter()
-        if not hum then return end
-        if kecJalan then hum.WalkSpeed = kecJalan end
-        local cam = Workspace.CurrentCamera
-        if flyAktif and bv and bg and bv.Parent and hrp and cam then
-            local md = hum.MoveDirection
-            local cf = cam.CFrame
-            if md.Magnitude > 0.05 then
-                local datar = Vector3.new(cf.LookVector.X, 0, cf.LookVector.Z)
-                local kanan = Vector3.new(cf.RightVector.X, 0, cf.RightVector.Z)
-                local maju = datar.Magnitude > 0 and md:Dot(datar.Unit) or 0
-                local geser = kanan.Magnitude > 0 and md:Dot(kanan.Unit) or 0
-                bv.Velocity = (cf.LookVector * maju + cf.RightVector * geser) * flyKec
-            else
-                bv.Velocity = Vector3.zero
-            end
-            bg.CFrame = cf
-        end
-    end)
-
-    sambung(RunService.Stepped, function()
-        if noclipAktif then
-            local char = player.Character
-            if char then
-                for _, p in ipairs(char:GetDescendants()) do
-                    if p:IsA("BasePart") then p.CanCollide = false end
-                end
-            end
-        end
-    end)
-
-    sambung(UserInputService.JumpRequest, function()
-        if lompatTakTerbatas then
-            local _, hum = ambilKarakter()
-            if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-        end
-    end)
-
-    -- ========== SAAT KARAKTER SPAWN ==========
-    -- Rig HANYA diganti kalau tombol Play sudah ditekan (izinPlay = true).
-    sambung(player.CharacterAdded, function(char)
-        if izinPlay and not sedangGanti then
-            izinPlay = false
-            task.wait(0.2)
-            terapkanRig(char)
-        else
-            task.wait(0.4)
-            perbaruiTombolRig()
-        end
-        task.wait(0.6)
-        if flyAktif then setFly(true) end
-        perbaruiTombolRig()
-    end)
-
-    -- ========== PEMBERSIH (DIPANGGIL SAAT SCRIPT DIJALANKAN ULANG) ==========
     genv.StudioPlusBersih = function()
         aktif = false
-        izinPlay = false
-        pcall(function() setFly(false) end)
-        pcall(function() setTerang(false) end)
-        noclipAktif = false
-        lompatTakTerbatas = false
-        kecJalan = nil
-        for _, c in ipairs(koneksi) do
-            pcall(function() c:Disconnect() end)
-        end
-        table.clear(koneksi)
         putusBar()
-        for _, b in ipairs(tombolBaru) do
-            pcall(function() b:Destroy() end)
-        end
-        table.clear(tombolBaru)
-        pcall(function()
-            if mainBar and ukuranAsliBar then mainBar.Size = ukuranAsliBar end
-        end)
-        pcall(function() if ui then ui:Destroy() end end)
     end
-
-    notif("MainBar Plus aktif")
 end)
 
 -- ========================================================================
