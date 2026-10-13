@@ -1,4 +1,4 @@
--- LocalScript: ColorPalette controller v6 (Roblox Studio theme, tanpa script.Parent, toggle tidak diubah)
+-- LocalScript: ColorPalette controller v7 (Roblox Studio theme, tanpa script.Parent, toggle tidak diubah)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -85,8 +85,8 @@ local draggingWindow = false
 local hoverWheel = 0
 local dragStart, dragOrigin
 local closing = false
+local closeToken = 0
 local openedAt = 0
-local closedOutsideAt = nil
 local originalSize = colorPalette.Size
 local history = {}
 local favorites = {}
@@ -253,10 +253,10 @@ styleActionButton(cancelButton, THEME.btn, THEME.btnHover, THEME.text)
 
 ---------------------------------------------------------------------
 -- Palette gradient AKURAT
--- X = hue, Y = saturasi. Kegelapan lewat BackgroundColor3 (abu val)
--- yang dikali dengan UIGradient => hue*val dan putih*val = HSV asli
+-- X = hue, Y = saturasi, lalu overlay hitam (transparansi = val)
+-- supaya seluruh palette ikut gelap/terang sesuai bar Darkness
 ---------------------------------------------------------------------
-local hueLayer, satLayer
+local hueLayer, satLayer, darkLayer
 local paletteZ = 1
 
 if palette and palette:IsA("GuiObject") then
@@ -273,7 +273,7 @@ if palette and palette:IsA("GuiObject") then
 		if old then old:Destroy() end
 	end
 
-	local function layer(name, z)
+	local function layer(name, z, color)
 		local f = Instance.new("Frame")
 		f.Name = name
 		f.Position = UDim2.fromScale(0, 0)
@@ -282,14 +282,14 @@ if palette and palette:IsA("GuiObject") then
 		f.Active = false
 		f.ZIndex = paletteZ + z
 		f.BackgroundTransparency = 0
-		f.BackgroundColor3 = Color3.new(val, val, val)
+		f.BackgroundColor3 = color
 		f.Parent = palette
 		addCorner(f, 3)
 		return f
 	end
 
-	-- 1) Pelangi horizontal
-	hueLayer = layer("HueLayer", 1)
+	-- 1) Pelangi horizontal (penuh terang)
+	hueLayer = layer("HueLayer", 1, Color3.new(1, 1, 1))
 	local hg = Instance.new("UIGradient")
 	local keys = {}
 	for i = 0, 6 do
@@ -300,7 +300,7 @@ if palette and palette:IsA("GuiObject") then
 	hg.Parent = hueLayer
 
 	-- 2) Putih: atas transparan (sat 1) -> bawah pekat (sat 0)
-	satLayer = layer("SatLayer", 2)
+	satLayer = layer("SatLayer", 2, Color3.new(1, 1, 1))
 	local sg = Instance.new("UIGradient")
 	sg.Rotation = 90
 	sg.Transparency = NumberSequence.new({
@@ -308,6 +308,10 @@ if palette and palette:IsA("GuiObject") then
 		NumberSequenceKeypoint.new(1, 0),
 	})
 	sg.Parent = satLayer
+
+	-- 3) Overlay hitam: val 1 = transparan penuh, val 0 = hitam penuh
+	darkLayer = layer("DarkLayer", 3, Color3.new(0, 0, 0))
+	darkLayer.BackgroundTransparency = val
 end
 
 if crosshair and crosshair:IsA("GuiObject") then
@@ -468,6 +472,7 @@ local function section(text)
 	l.TextSize = 13
 	l.TextColor3 = THEME.textDim
 	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextTruncate = Enum.TextTruncate.AtEnd
 	l.Text = string.upper(text)
 	l.Parent = extras
 	return l
@@ -675,7 +680,7 @@ local tintColors = {}
 -- History & Favorites
 section("Recent")
 local historySw = swatchRow(MAX_HISTORY, 8, 22)
-section("Favorites  (klik kanan / tahan = hapus)")
+section("Favorites (klik kanan = hapus)")
 local favSw = swatchRow(MAX_FAV, 8, 22)
 local clearFavBtn = buttonRow({ "Clear favorites" })[1]
 
@@ -811,10 +816,10 @@ updateColor = function()
 	currentColor = Color3.fromHSV(hue, sat, val)
 	local r, g, b = to255(currentColor)
 
-	-- Palette tengah ikut gelap (langsung, tanpa tween supaya selalu sinkron)
-	local shade = Color3.new(val, val, val)
-	if hueLayer then hueLayer.BackgroundColor3 = shade end
-	if satLayer then satLayer.BackgroundColor3 = shade end
+	-- Palette tengah ikut gelap: overlay hitam (langsung, tanpa tween)
+	if darkLayer then
+		darkLayer.BackgroundTransparency = val
+	end
 
 	-- Bar darkness mengikuti hue & sat
 	if darkGradient then
@@ -1152,11 +1157,14 @@ end)
 local function closePicker()
 	if closing then return end
 	closing = true
+	closeToken += 1
+	local myToken = closeToken
 	local t = tween(colorPalette, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
 		Size = UDim2.new(originalSize.X.Scale * 0.8, originalSize.X.Offset * 0.8,
 			originalSize.Y.Scale * 0.8, originalSize.Y.Offset * 0.8),
 	}, "closeTween")
 	if t then t.Completed:Wait() end
+	if myToken ~= closeToken or not closing then return end -- dibatalkan (dibuka lagi)
 	colorPalette.Visible = false
 	colorPalette.Size = originalSize
 	closing = false
@@ -1181,11 +1189,10 @@ local function confirm()
 	task.spawn(closePicker)
 end
 
-local function cancel(byOutside)
+local function cancel()
 	if closing then return end
 	setColor(openColor, false)
 	colorPalette:SetAttribute("Cancelled", (colorPalette:GetAttribute("Cancelled") or 0) + 1)
-	if byOutside then closedOutsideAt = os.clock() end
 	task.spawn(closePicker)
 end
 
@@ -1193,36 +1200,34 @@ if okButton and okButton:IsA("GuiButton") then
 	okButton.MouseButton1Click:Connect(confirm)
 end
 if cancelButton and cancelButton:IsA("GuiButton") then
-	cancelButton.MouseButton1Click:Connect(function() cancel(false) end)
+	cancelButton.MouseButton1Click:Connect(function() cancel() end)
 end
 
 ---------------------------------------------------------------------
--- Klik di luar frame = tutup (aman untuk toggle)
+-- Klik di luar frame = tutup (klik tombol lain, mis. toggle, diabaikan)
 ---------------------------------------------------------------------
 local function insideGui(gui, pos)
 	local p, s = gui.AbsolutePosition, gui.AbsoluteSize
 	return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
 end
 
-local pressOutside = false
-local pressTime = 0
+local function overOtherButton(pos)
+	for _, g in ipairs(playerGui:GetGuiObjectsAtPosition(pos.X, pos.Y)) do
+		if g:IsA("GuiButton") and g.Visible and not g:IsDescendantOf(colorPalette) then
+			return true
+		end
+	end
+	return false
+end
 
 UserInputService.InputBegan:Connect(function(input)
 	if not isPress(input) then return end
-	pressOutside = false
 	if not colorPalette.Visible or closing then return end
+	if os.clock() - openedAt < 0.25 then return end
 	local pos = input.Position
 	if insideGui(colorPalette, pos) or insideGui(extras, pos) then return end
-	pressOutside = true
-	pressTime = os.clock()
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-	if not isPress(input) or not pressOutside then return end
-	pressOutside = false
-	if not colorPalette.Visible or closing then return end
-	if openedAt > pressTime then return end -- frame baru dibuka setelah klik ini (toggle)
-	cancel(true)
+	if overOtherButton(pos) then return end
+	cancel()
 end)
 
 ---------------------------------------------------------------------
@@ -1249,7 +1254,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	if k == Enum.KeyCode.Return or k == Enum.KeyCode.KeypadEnter then
 		confirm()
 	elseif k == Enum.KeyCode.Escape then
-		cancel(false)
+		cancel()
 	elseif k == Enum.KeyCode.R then
 		randomColor()
 	elseif k == Enum.KeyCode.F then
@@ -1281,27 +1286,29 @@ end)
 -- Animasi saat dibuka & update layout
 ---------------------------------------------------------------------
 colorPalette:GetPropertyChangedSignal("Visible"):Connect(function()
-	if not colorPalette.Visible then return end
+	closeToken += 1 -- batalkan closePicker yang sedang menunggu
+	closing = false
 
-	if closedOutsideAt and os.clock() - closedOutsideAt < 0.35 then
-		colorPalette.Visible = false
+	for _, k in ipairs({ "openTween", "closeTween" }) do
+		local tw = activeTweens[k]
+		if tw then tw:Cancel() end
+	end
+
+	if not colorPalette.Visible then
+		colorPalette.Size = originalSize
 		return
 	end
 
-	if not closing then
-		openedAt = os.clock()
-		openColor = currentColor
-		undoStack, redoStack = {}, {}
-		colorPalette.Size = UDim2.new(originalSize.X.Scale * 0.85, originalSize.X.Offset * 0.85,
-			originalSize.Y.Scale * 0.85, originalSize.Y.Offset * 0.85)
-		local t = tween(colorPalette, TWEEN_POP, { Size = originalSize }, "openTween")
-		if t then
-			t.Completed:Connect(function() updateIndicators(false) end)
-		end
-		task.defer(function()
-			updateIndicators(false)
-		end)
+	openedAt = os.clock()
+	openColor = currentColor
+	undoStack, redoStack = {}, {}
+	colorPalette.Size = UDim2.new(originalSize.X.Scale * 0.85, originalSize.X.Offset * 0.85,
+		originalSize.Y.Scale * 0.85, originalSize.Y.Offset * 0.85)
+	local t = tween(colorPalette, TWEEN_POP, { Size = originalSize }, "openTween")
+	if t then
+		t.Completed:Connect(function() updateIndicators(false) end)
 	end
+	task.defer(function() updateIndicators(false) end)
 end)
 
 if palette and palette:IsA("GuiObject") then
