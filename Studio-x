@@ -1,4 +1,4 @@
--- LocalScript: ColorPalette controller v7 (Roblox Studio theme, tanpa script.Parent, toggle tidak diubah)
+-- LocalScript: ColorPalette controller v6 (Roblox Studio theme, tanpa script.Parent, toggle tidak diubah)
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -85,8 +85,8 @@ local draggingWindow = false
 local hoverWheel = 0
 local dragStart, dragOrigin
 local closing = false
-local closeToken = 0
 local openedAt = 0
+local pressedOutside = false
 local originalSize = colorPalette.Size
 local history = {}
 local favorites = {}
@@ -202,8 +202,8 @@ colorPalette.ClipsDescendants = false
 if colorPalette:IsA("ImageLabel") or colorPalette:IsA("ImageButton") then
 	colorPalette.ImageTransparency = 1
 end
-addCorner(colorPalette, 4)
-addStroke(colorPalette, THEME.border, 2, 0)
+if not colorPalette:FindFirstChildOfClass("UICorner") then addCorner(colorPalette, 4) end
+if not colorPalette:FindFirstChildOfClass("UIStroke") then addStroke(colorPalette, THEME.border, 2, 0) end
 
 if clickBlocker and clickBlocker:IsA("GuiObject") then
 	clickBlocker.Active = true
@@ -228,6 +228,7 @@ local function studioBox(gui, strokeColor)
 end
 
 studioBox(palette, THEME.border2)
+studioBox(darkness, THEME.border2)
 studioBox(selectedColorFrame, THEME.border2)
 
 local function styleActionButton(btn, baseColor, hoverColor, textColor)
@@ -252,11 +253,10 @@ styleActionButton(okButton, THEME.accent, THEME.accentHover, Color3.new(1, 1, 1)
 styleActionButton(cancelButton, THEME.btn, THEME.btnHover, THEME.text)
 
 ---------------------------------------------------------------------
--- Palette gradient AKURAT
--- X = hue, Y = saturasi, lalu overlay hitam (transparansi = val)
--- supaya seluruh palette ikut gelap/terang sesuai bar Darkness
+-- Palette tengah: Hue (X) + Saturasi (Y) + overlay hitam (Darkness)
+-- Semua visual lama di dalam Palette disembunyikan (kecuali crosshair)
 ---------------------------------------------------------------------
-local hueLayer, satLayer, darkLayer
+local darkOverlay
 local paletteZ = 1
 
 if palette and palette:IsA("GuiObject") then
@@ -273,7 +273,13 @@ if palette and palette:IsA("GuiObject") then
 		if old then old:Destroy() end
 	end
 
-	local function layer(name, z, color)
+	for _, o in ipairs(palette:GetChildren()) do
+		if o:IsA("GuiObject") and o ~= crosshair and o.Name ~= "ColorPaletteCrosshairs" then
+			o.Visible = false
+		end
+	end
+
+	local function layer(name, z)
 		local f = Instance.new("Frame")
 		f.Name = name
 		f.Position = UDim2.fromScale(0, 0)
@@ -282,14 +288,13 @@ if palette and palette:IsA("GuiObject") then
 		f.Active = false
 		f.ZIndex = paletteZ + z
 		f.BackgroundTransparency = 0
-		f.BackgroundColor3 = color
+		f.BackgroundColor3 = Color3.new(1, 1, 1)
 		f.Parent = palette
 		addCorner(f, 3)
 		return f
 	end
 
-	-- 1) Pelangi horizontal (penuh terang)
-	hueLayer = layer("HueLayer", 1, Color3.new(1, 1, 1))
+	local base = layer("HueLayer", 1)
 	local hg = Instance.new("UIGradient")
 	local keys = {}
 	for i = 0, 6 do
@@ -297,10 +302,9 @@ if palette and palette:IsA("GuiObject") then
 	end
 	hg.Color = ColorSequence.new(keys)
 	hg.Rotation = 0
-	hg.Parent = hueLayer
+	hg.Parent = base
 
-	-- 2) Putih: atas transparan (sat 1) -> bawah pekat (sat 0)
-	satLayer = layer("SatLayer", 2, Color3.new(1, 1, 1))
+	local satLayer = layer("SatLayer", 2)
 	local sg = Instance.new("UIGradient")
 	sg.Rotation = 90
 	sg.Transparency = NumberSequence.new({
@@ -309,52 +313,50 @@ if palette and palette:IsA("GuiObject") then
 	})
 	sg.Parent = satLayer
 
-	-- 3) Overlay hitam: val 1 = transparan penuh, val 0 = hitam penuh
-	darkLayer = layer("DarkLayer", 3, Color3.new(0, 0, 0))
-	darkLayer.BackgroundTransparency = val
+	-- overlay hitam: val 1 = transparan (terang), val 0 = hitam penuh
+	darkOverlay = layer("DarkLayer", 6)
+	darkOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
+	darkOverlay.BackgroundTransparency = val
 end
 
 if crosshair and crosshair:IsA("GuiObject") then
-	crosshair.ZIndex = paletteZ + 10
+	crosshair.ZIndex = paletteZ + 12
+	crosshair.Visible = true
 end
 
 ---------------------------------------------------------------------
--- Bar Darkness: SATU bar saja (visual asli disembunyikan)
+-- Bar Darkness: HANYA SATU (visual lama disembunyikan)
 ---------------------------------------------------------------------
-local darkGradient, darkArrow
-
-local function hideVisual(root)
-	if not root then return end
-	local list = root:GetDescendants()
-	table.insert(list, root)
-	for _, d in ipairs(list) do
-		if d:IsA("UIStroke") or d:IsA("UIGradient") then
-			d:Destroy()
-		elseif d:IsA("GuiObject") then
-			d.BackgroundTransparency = 1
-			if d:IsA("ImageLabel") or d:IsA("ImageButton") then
-				d.ImageTransparency = 1
-			end
-			if d:IsA("TextLabel") or d:IsA("TextButton") then
-				d.TextTransparency = 1
-			end
-		end
-	end
-end
+local darkGradient, darkMarker
 
 if darkness and darkness:IsA("GuiObject") then
-	for _, n in ipairs({ "DarkBar", "DarkArrow" }) do
-		local old = darkness:FindFirstChild(n)
-		if old then old:Destroy() end
+	local oldBar = darkness:FindFirstChild("DarkBar")
+	if oldBar then oldBar:Destroy() end
+
+	darkness.Active = true
+	darkness.BackgroundTransparency = 1
+	darkness.ClipsDescendants = true
+	if darkness:IsA("ImageButton") or darkness:IsA("ImageLabel") then
+		darkness.ImageTransparency = 1
+	end
+	for _, o in ipairs(darkness:GetChildren()) do
+		if o:IsA("GuiObject") then
+			o.Visible = false
+		elseif o:IsA("UIGradient") then
+			o:Destroy()
+		end
 	end
 
-	hideVisual(darkness)
-	hideVisual(darknessAppearance)
-	darkness.Active = true
-	darkness.ClipsDescendants = false
+	-- sembunyikan DarknessAppearance (indikator/bar lama)
 	if darknessAppearance and darknessAppearance:IsA("GuiObject") then
-		darknessAppearance.Visible = true
-		darknessAppearance.Active = false
+		if darkness:IsDescendantOf(darknessAppearance) then
+			darknessAppearance.BackgroundTransparency = 1
+			if darknessAppearance:IsA("ImageButton") or darknessAppearance:IsA("ImageLabel") then
+				darknessAppearance.ImageTransparency = 1
+			end
+		elseif not darknessAppearance:IsDescendantOf(darkness) then
+			darknessAppearance.Visible = false
+		end
 	end
 
 	local bar = Instance.new("Frame")
@@ -366,29 +368,27 @@ if darkness and darkness:IsA("GuiObject") then
 	bar.ZIndex = darkness.ZIndex + 1
 	bar.Parent = darkness
 	addCorner(bar, 3)
-	addStroke(bar, THEME.border2, 1.5, 0)
 
 	darkGradient = Instance.new("UIGradient")
 	darkGradient.Rotation = 90
 	darkGradient.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(0, 0, 0))
 	darkGradient.Parent = bar
 
-	darkArrow = Instance.new("TextLabel")
-	darkArrow.Name = "DarkArrow"
-	darkArrow.AnchorPoint = Vector2.new(0, 0.5)
-	darkArrow.Position = UDim2.new(1, 3, 1 - val, 0)
-	darkArrow.Size = UDim2.fromOffset(14, 16)
-	darkArrow.BackgroundTransparency = 1
-	darkArrow.Font = Enum.Font.SourceSansBold
-	darkArrow.TextSize = 18
-	darkArrow.TextColor3 = THEME.accent
-	darkArrow.Text = "◀"
-	darkArrow.ZIndex = darkness.ZIndex + 5
-	darkArrow.Parent = darkness
+	darkMarker = Instance.new("Frame")
+	darkMarker.Name = "DarkMarker"
+	darkMarker.AnchorPoint = Vector2.new(0.5, 0.5)
+	darkMarker.Size = UDim2.new(1, 0, 0, 5)
+	darkMarker.Position = UDim2.new(0.5, 0, 1 - val, 0)
+	darkMarker.BackgroundColor3 = Color3.new(1, 1, 1)
+	darkMarker.BorderSizePixel = 0
+	darkMarker.ZIndex = darkness.ZIndex + 3
+	darkMarker.Active = false
+	darkMarker.Parent = bar
+	addStroke(darkMarker, Color3.new(0, 0, 0), 1.5, 0)
 end
 
 ---------------------------------------------------------------------
--- Drag Handle (geser window)
+-- Drag Handle
 ---------------------------------------------------------------------
 local handle = Instance.new("Frame")
 handle.Name = "DragHandle"
@@ -419,7 +419,7 @@ handle.MouseLeave:Connect(function()
 end)
 
 ---------------------------------------------------------------------
--- Panel Extras (kanan): scroll
+-- Panel Extras (kanan)
 ---------------------------------------------------------------------
 local extras = Instance.new("ScrollingFrame")
 extras.Name = "Extras"
@@ -472,7 +472,6 @@ local function section(text)
 	l.TextSize = 13
 	l.TextColor3 = THEME.textDim
 	l.TextXAlignment = Enum.TextXAlignment.Left
-	l.TextTruncate = Enum.TextTruncate.AtEnd
 	l.Text = string.upper(text)
 	l.Parent = extras
 	return l
@@ -496,7 +495,7 @@ local function makeButton(parent, text, layoutOrder)
 		tween(st, TWEEN_FAST, { Color = THEME.accent }, st)
 	end)
 	b.MouseLeave:Connect(function()
-		tween(b, TWEEN_FAST, { BackgroundColor3 = THEME.btn }, b)
+		tween(b, TWEEN_FAST, { BackgroundColor3 = b:GetAttribute("BaseColor") or THEME.btn }, b)
 		tween(st, TWEEN_FAST, { Color = THEME.border }, st)
 	end)
 	return b
@@ -576,7 +575,6 @@ end
 
 local changeColor, setColor, updateColor, updateIndicators, refreshExtras
 
--- HEX + Random
 section("Hex")
 local hexRow = row(28)
 local hexBox, hexStroke = makeBox(hexRow, "#A3A2A5", "#RRGGBB")
@@ -587,10 +585,10 @@ randomBtn.AnchorPoint = Vector2.new(1, 0)
 randomBtn.Position = UDim2.new(1, 0, 0, 0)
 randomBtn.Size = UDim2.new(0, 70, 1, 0)
 randomBtn.BackgroundColor3 = THEME.accent
+randomBtn:SetAttribute("BaseColor", THEME.accent)
 randomBtn.TextColor3 = Color3.new(1, 1, 1)
 randomBtn.Font = Enum.Font.SourceSansBold
 
--- RGB
 section("RGB")
 local rgbRow = gridRow(26, 3)
 local rBox = makeBox(rgbRow, "", "R"); rBox.LayoutOrder = 1
@@ -598,7 +596,6 @@ local gBox = makeBox(rgbRow, "", "G"); gBox.LayoutOrder = 2
 local bBox = makeBox(rgbRow, "", "B"); bBox.LayoutOrder = 3
 for _, bx in ipairs({ rBox, gBox, bBox }) do bx.TextXAlignment = Enum.TextXAlignment.Center end
 
--- HSV
 section("HSV")
 local hsvRow = gridRow(26, 3)
 local hBox = makeBox(hsvRow, "", "H°"); hBox.LayoutOrder = 1
@@ -606,7 +603,6 @@ local sBox = makeBox(hsvRow, "", "S%"); sBox.LayoutOrder = 2
 local vBox = makeBox(hsvRow, "", "V%"); vBox.LayoutOrder = 3
 for _, bx in ipairs({ hBox, sBox, vBox }) do bx.TextXAlignment = Enum.TextXAlignment.Center end
 
--- Kontras
 section("Contrast (WCAG)")
 local previewRow = row(34)
 local preview = Instance.new("Frame")
@@ -648,12 +644,10 @@ nearestLabel.TextXAlignment = Enum.TextXAlignment.Left
 nearestLabel.Text = ""
 nearestLabel.Parent = nearestRow
 
--- Aksi cepat
 section("Quick actions")
 local ops1 = buttonRow({ "Invert", "Gray", "Lighter", "Darker" })
 local ops2 = buttonRow({ "Undo", "Redo", "Reset", "★ Save" })
 
--- Harmony
 section("Harmony")
 local HARMONIES = {
 	{ name = "Complementary", offsets = { 180 } },
@@ -669,7 +663,6 @@ harmonyBtn.Size = UDim2.new(1, 0, 1, 0)
 local harmonySw = swatchRow(5, 5, 26)
 local harmonyColors = {}
 
--- Shades & Tints
 section("Shades")
 local shadeSw = swatchRow(7, 7, 22)
 local shadeColors = {}
@@ -677,10 +670,9 @@ section("Tints")
 local tintSw = swatchRow(7, 7, 22)
 local tintColors = {}
 
--- History & Favorites
 section("Recent")
 local historySw = swatchRow(MAX_HISTORY, 8, 22)
-section("Favorites (klik kanan = hapus)")
+section("Favorites  (klik kanan / tahan = hapus)")
 local favSw = swatchRow(MAX_FAV, 8, 22)
 local clearFavBtn = buttonRow({ "Clear favorites" })[1]
 
@@ -758,12 +750,12 @@ updateIndicators = function(animated)
 		setInParent(crosshair, ax, ay, info, "crosshairPos")
 	end
 
-	if darkArrow then
-		local target = UDim2.new(1, 3, 1 - val, 0)
+	if darkMarker then
+		local target = UDim2.new(0.5, 0, 1 - val, 0)
 		if info then
-			tween(darkArrow, info, { Position = target }, "darkPos")
+			tween(darkMarker, info, { Position = target }, "darkMarkerPos")
 		else
-			darkArrow.Position = target
+			darkMarker.Position = target
 		end
 	end
 end
@@ -816,12 +808,10 @@ updateColor = function()
 	currentColor = Color3.fromHSV(hue, sat, val)
 	local r, g, b = to255(currentColor)
 
-	-- Palette tengah ikut gelap: overlay hitam (langsung, tanpa tween)
-	if darkLayer then
-		darkLayer.BackgroundTransparency = val
+	-- palette tengah ikut gelap (langsung, tanpa tween supaya selalu sinkron)
+	if darkOverlay then
+		darkOverlay.BackgroundTransparency = val
 	end
-
-	-- Bar darkness mengikuti hue & sat
 	if darkGradient then
 		darkGradient.Color = ColorSequence.new(Color3.fromHSV(hue, sat, 1), Color3.new(0, 0, 0))
 	end
@@ -863,7 +853,7 @@ changeColor = function(color, animated)
 end
 
 ---------------------------------------------------------------------
--- Palette (klik + drag + scroll)
+-- Input palette / darkness
 ---------------------------------------------------------------------
 local function pulseCrosshair()
 	if not crosshair or not crosshair:IsA("GuiObject") then return end
@@ -956,14 +946,43 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
+---------------------------------------------------------------------
+-- Klik di luar frame = tutup (diproses saat tombol dilepas)
+---------------------------------------------------------------------
+local function insideGui(gui, pos)
+	local p, s = gui.AbsolutePosition, gui.AbsoluteSize
+	return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
+end
+
+local cancel -- forward
+
+UserInputService.InputBegan:Connect(function(input)
+	if not isPress(input) then return end
+	if not colorPalette.Visible or closing then return end
+	if os.clock() - openedAt < 0.3 then return end
+	local pos = input.Position
+	if insideGui(colorPalette, pos) or insideGui(extras, pos) then return end
+	pressedOutside = true
+end)
+
 UserInputService.InputEnded:Connect(function(input)
-	if isPress(input) then
-		if draggingWindow then
-			tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundColor3 = THEME.textDim, BackgroundTransparency = 0.3 }, "gripHover")
-		end
-		draggingPalette = false
-		draggingDarkness = false
-		draggingWindow = false
+	if not isPress(input) then return end
+
+	if draggingWindow then
+		tween(grip, TWEEN_FAST, { Size = UDim2.fromOffset(40, 4), BackgroundColor3 = THEME.textDim, BackgroundTransparency = 0.3 }, "gripHover")
+	end
+	draggingPalette = false
+	draggingDarkness = false
+	draggingWindow = false
+
+	if pressedOutside then
+		pressedOutside = false
+		-- tunggu sebentar: kalau tombol toggle sudah menutup frame, tidak perlu ditutup lagi
+		task.delay(0.1, function()
+			if colorPalette.Visible and not closing then
+				cancel(true)
+			end
+		end)
 	end
 end)
 
@@ -1004,7 +1023,7 @@ if basicColors then
 end
 
 ---------------------------------------------------------------------
--- Input extras: hex / rgb / hsv / random
+-- Input extras
 ---------------------------------------------------------------------
 local function shake(gui)
 	local base = gui.Position
@@ -1152,19 +1171,16 @@ clearFavBtn.MouseButton1Click:Connect(function()
 end)
 
 ---------------------------------------------------------------------
--- Close + Confirm + Cancel
+-- Close + Confirm + Cancel (aman: tidak bisa macet)
 ---------------------------------------------------------------------
 local function closePicker()
 	if closing then return end
 	closing = true
-	closeToken += 1
-	local myToken = closeToken
-	local t = tween(colorPalette, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+	tween(colorPalette, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
 		Size = UDim2.new(originalSize.X.Scale * 0.8, originalSize.X.Offset * 0.8,
 			originalSize.Y.Scale * 0.8, originalSize.Y.Offset * 0.8),
 	}, "closeTween")
-	if t then t.Completed:Wait() end
-	if myToken ~= closeToken or not closing then return end -- dibatalkan (dibuka lagi)
+	task.wait(0.2)
 	colorPalette.Visible = false
 	colorPalette.Size = originalSize
 	closing = false
@@ -1189,7 +1205,7 @@ local function confirm()
 	task.spawn(closePicker)
 end
 
-local function cancel()
+cancel = function()
 	if closing then return end
 	setColor(openColor, false)
 	colorPalette:SetAttribute("Cancelled", (colorPalette:GetAttribute("Cancelled") or 0) + 1)
@@ -1200,41 +1216,11 @@ if okButton and okButton:IsA("GuiButton") then
 	okButton.MouseButton1Click:Connect(confirm)
 end
 if cancelButton and cancelButton:IsA("GuiButton") then
-	cancelButton.MouseButton1Click:Connect(function() cancel() end)
+	cancelButton.MouseButton1Click:Connect(function() cancel(false) end)
 end
-
----------------------------------------------------------------------
--- Klik di luar frame = tutup (klik tombol lain, mis. toggle, diabaikan)
----------------------------------------------------------------------
-local function insideGui(gui, pos)
-	local p, s = gui.AbsolutePosition, gui.AbsoluteSize
-	return pos.X >= p.X and pos.X <= p.X + s.X and pos.Y >= p.Y and pos.Y <= p.Y + s.Y
-end
-
-local function overOtherButton(pos)
-	for _, g in ipairs(playerGui:GetGuiObjectsAtPosition(pos.X, pos.Y)) do
-		if g:IsA("GuiButton") and g.Visible and not g:IsDescendantOf(colorPalette) then
-			return true
-		end
-	end
-	return false
-end
-
-UserInputService.InputBegan:Connect(function(input)
-	if not isPress(input) then return end
-	if not colorPalette.Visible or closing then return end
-	if os.clock() - openedAt < 0.25 then return end
-	local pos = input.Position
-	if insideGui(colorPalette, pos) or insideGui(extras, pos) then return end
-	if overOtherButton(pos) then return end
-	cancel()
-end)
 
 ---------------------------------------------------------------------
 -- Shortcut keyboard
--- Enter OK | Esc batal | R random | F favorit | I invert
--- Ctrl+Z undo | Ctrl+Y / Ctrl+Shift+Z redo
--- Panah hue/sat | PageUp/PageDown terang/gelap | Shift = cepat
 ---------------------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, gpe)
 	if gpe or not colorPalette.Visible or closing then return end
@@ -1254,7 +1240,7 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 	if k == Enum.KeyCode.Return or k == Enum.KeyCode.KeypadEnter then
 		confirm()
 	elseif k == Enum.KeyCode.Escape then
-		cancel()
+		cancel(false)
 	elseif k == Enum.KeyCode.R then
 		randomColor()
 	elseif k == Enum.KeyCode.F then
@@ -1283,32 +1269,30 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 end)
 
 ---------------------------------------------------------------------
--- Animasi saat dibuka & update layout
+-- Animasi saat dibuka (tidak pernah memblokir pembukaan)
 ---------------------------------------------------------------------
 colorPalette:GetPropertyChangedSignal("Visible"):Connect(function()
-	closeToken += 1 -- batalkan closePicker yang sedang menunggu
-	closing = false
-
-	for _, k in ipairs({ "openTween", "closeTween" }) do
-		local tw = activeTweens[k]
-		if tw then tw:Cancel() end
-	end
-
 	if not colorPalette.Visible then
-		colorPalette.Size = originalSize
+		pressedOutside = false
 		return
 	end
 
 	openedAt = os.clock()
-	openColor = currentColor
-	undoStack, redoStack = {}, {}
-	colorPalette.Size = UDim2.new(originalSize.X.Scale * 0.85, originalSize.X.Offset * 0.85,
-		originalSize.Y.Scale * 0.85, originalSize.Y.Offset * 0.85)
-	local t = tween(colorPalette, TWEEN_POP, { Size = originalSize }, "openTween")
-	if t then
-		t.Completed:Connect(function() updateIndicators(false) end)
+	pressedOutside = false
+
+	if not closing then
+		openColor = currentColor
+		undoStack, redoStack = {}, {}
+		colorPalette.Size = UDim2.new(originalSize.X.Scale * 0.85, originalSize.X.Offset * 0.85,
+			originalSize.Y.Scale * 0.85, originalSize.Y.Offset * 0.85)
+		tween(colorPalette, TWEEN_POP, { Size = originalSize }, "openTween")
+		task.delay(0.35, function()
+			updateIndicators(false)
+		end)
+		task.defer(function()
+			updateIndicators(false)
+		end)
 	end
-	task.defer(function() updateIndicators(false) end)
 end)
 
 if palette and palette:IsA("GuiObject") then
