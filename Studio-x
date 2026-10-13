@@ -6,7 +6,7 @@
 -- ========================================================================
 task.spawn(function()
     -- ISI DI SINI: upload logo ke Roblox, lalu tempel ID-nya. Contoh: "rbxassetid://1234567890"
-    local LOGO_ID = "rbxassetid://91557427976489"
+    local LOGO_ID = "rbxthumb://type=Asset&id=91557427976489&w=420&h=420"
     local DURASI = 8 -- detik sebelum intro tutup otomatis
 
     local Players = game:GetService("Players")
